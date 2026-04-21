@@ -6,14 +6,15 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED_PATH = ROOT / "custom_components" / "pahlen_monitor" / "generated_api.py"
 GENERATOR_PATH = ROOT / "scripts" / "generate_python_contract.py"
 
 
 def _load_generator():
-    spec = importlib.util.spec_from_file_location("generate_python_contract", GENERATOR_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "generate_python_contract", GENERATOR_PATH
+    )
     if spec is None or spec.loader is None:
         raise SystemExit(f"Could not load {GENERATOR_PATH}")
     module = importlib.util.module_from_spec(spec)
