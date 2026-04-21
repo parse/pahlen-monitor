@@ -3,6 +3,7 @@ import logging
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.helpers import selector
 from openai import AsyncOpenAI
 
 from .const import (
@@ -81,8 +82,12 @@ class PahlenMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_INSTALLATION_ID): str,
-                    vol.Required(CONF_CAMERA_ENTITY): str,
-                    vol.Required(CONF_LIGHT_ENTITY): str,
+                    vol.Required(CONF_CAMERA_ENTITY): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="camera")
+                    ),
+                    vol.Required(CONF_LIGHT_ENTITY): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="light")
+                    ),
                     vol.Required(CONF_OPENAI_API_KEY): str,
                     vol.Required(CONF_PUSH_TOKEN): str,
                     vol.Required(CONF_BACKEND_URL): str,
