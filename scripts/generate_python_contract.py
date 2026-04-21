@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 OPENAPI_PATH = ROOT / "backend" / "openapi.json"
 OUTPUT_PATH = ROOT / "custom_components" / "pahlen_monitor" / "generated_api.py"
@@ -64,6 +63,7 @@ def _generate_status_alias(unit_schema: dict) -> list[str]:
         f"Status = Literal[{enum_values}]",
         f"VALID_STATUSES = {{{set_values}}}",
         "",
+        "",
     ]
 
 
@@ -76,6 +76,7 @@ def _generate_typed_dict(name: str, schema: dict) -> list[str]:
             annotation = f"NotRequired[{annotation}]"
         lines.append(f"    {field_name}: {annotation}")
     lines.append("")
+    lines.append("")
     return lines
 
 
@@ -87,8 +88,9 @@ def render_contract() -> str:
         "from typing import Literal, NotRequired, TypedDict",
         "",
     ]
-    lines.extend(_generate_status_alias(schemas["UnitAnalysis"]))
     for schema_name in SCHEMA_ORDER:
+        if schema_name == "UnitAnalysis":
+            lines.extend(_generate_status_alias(schemas["UnitAnalysis"]))
         lines.extend(_generate_typed_dict(schema_name, schemas[schema_name]))
     return "\n".join(lines).rstrip() + "\n"
 

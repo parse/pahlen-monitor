@@ -27,8 +27,8 @@ run_check "Backend: TypeScript" "(cd backend && npm run typecheck)"
 run_check "Backend: ESLint" "(cd backend && npm run lint)"
 run_check "Backend: Prettier" "(cd backend && npm run format:check)"
 run_check "Backend: Knip" "(cd backend && npm run knip)"
-run_check "HomeAssistant HACS Plugin: ruff" "(cd custom_components && ruff check)"
-run_check "HomeAssistant HACS Plugin: format" "(cd custom_components && ruff format --check)"
+run_check "HomeAssistant HACS Plugin: ruff" "ruff check custom_components scripts"
+run_check "HomeAssistant HACS Plugin: format" "ruff format --check custom_components scripts"
 
 if [ -n "$FAILED" ]; then
   echo ""
