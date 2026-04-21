@@ -16,8 +16,11 @@
           "push_token": "Säkerhetstoken (Push Token)",
           "backend_url": "Backend-URL",
           "scan_interval": "Analysintervall (minuter)",
-          "image_detail": "Bilddetalj",
+          "image_detail": "AI-bilddetalj",
           "staleness_threshold": "Maximal dataålder (minuter)"
+        },
+        "data_description": {
+          "image_detail": "Styr hur mycket bilddetalj som skickas till OpenAI för varje bild. Högre detalj kan förbättra LED-detektering, men kan vara långsammare och kosta mer."
         }
       },
       "consumer": {

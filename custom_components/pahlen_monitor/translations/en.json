@@ -16,8 +16,11 @@
           "push_token": "Push Token",
           "backend_url": "Backend URL",
           "scan_interval": "Scan interval (minutes)",
-          "image_detail": "Image detail",
+          "image_detail": "AI image detail",
           "staleness_threshold": "Staleness threshold (minutes)"
+        },
+        "data_description": {
+          "image_detail": "Controls how much visual detail is sent to OpenAI for each image. Higher detail can improve LED detection, but may be slower and cost more."
         }
       },
       "consumer": {
