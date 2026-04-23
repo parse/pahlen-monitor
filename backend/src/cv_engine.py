@@ -90,11 +90,13 @@ def analyze_burst(images_bytes: list[bytes], rois: dict = ROIS):
         blink_leds = []
 
         total_frames = len(processed_images)
+        led_on_counts = np.zeros(7)
         for i in range(7):
             on_frames = np.array(led_on_frames[device][i])
             on_count_led = np.sum(on_frames)
             is_on = (on_count_led / total_frames) >= 0.5
-            led_states.append(bool(is_on))
+            # We will store the actual on_count to use for tie-breaking
+            led_on_counts[i] = on_count_led
 
             transitions = np.sum(np.diff(on_frames.astype(int)) != 0)
 
@@ -109,8 +111,33 @@ def analyze_burst(images_bytes: list[bytes], rois: dict = ROIS):
                 if transitions >= 2 and (on_count_led / total_frames) >= 0.1:
                     blink_leds.append(i + 1)
 
+        # Enforce single LED stable state
+        led_states = [False] * 7
+        if any(led_on_counts > 0):
+            best_led_idx = np.argmax(led_on_counts)
+            # Only count as 'on' if it's significant
+            if led_on_counts[best_led_idx] / total_frames >= 0.5:
+                led_states[best_led_idx] = True
+
         on_count = sum(led_states)
         has_blinking = len(blink_leds) > 0
+
+        # Infer PH level based on the first stable lit LED
+        ph_level = None
+        for i, is_on in enumerate(led_states):
+            if is_on:
+                ph_level = i + 1
+                break
+
+        # Infer Chlorine level: use the first blinking LED if present, otherwise use the first stable lit LED
+        chlorine_level = None
+        if has_blinking:
+            chlorine_level = blink_leds[0]
+        else:
+            for i, is_on in enumerate(led_states):
+                if is_on:
+                    chlorine_level = i + 1
+                    break
 
         # Logic refined from manual page 11 (Swedish)
         if 1 in blink_leds and 7 in blink_leds:
@@ -158,6 +185,7 @@ def analyze_burst(images_bytes: list[bytes], rois: dict = ROIS):
             "blinking": blink_leds,
             "status": status,
             "diagnosis": diagnosis,
+            "level": ph_level if device == "ph" else chlorine_level,
         }
 
     return final_results
