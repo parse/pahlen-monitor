@@ -18,7 +18,12 @@ async def async_setup_entry(
         return
 
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([PahlenAnalyzeButton(coordinator, entry)])
+    async_add_entities(
+        [
+            PahlenAnalyzeButton(coordinator, entry),
+            PahlenFetchLatestButton(coordinator, entry),
+        ]
+    )
 
 
 class PahlenAnalyzeButton(CoordinatorEntity, ButtonEntity):
@@ -29,6 +34,27 @@ class PahlenAnalyzeButton(CoordinatorEntity, ButtonEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_analyze_now"
 
+    @property
+    def available(self) -> bool:
+        return self.coordinator.installation_enabled
+
     async def async_press(self) -> None:
         _LOGGER.debug("Manual analysis requested via button")
         await self.coordinator.async_request_refresh()
+
+
+class PahlenFetchLatestButton(CoordinatorEntity, ButtonEntity):
+    _attr_name = "Pahlen Fetch Latest"
+    _attr_icon = "mdi:cloud-refresh"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_fetch_latest"
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.installation_enabled
+
+    async def async_press(self) -> None:
+        _LOGGER.debug("Manual latest-data fetch requested via button")
+        await self.coordinator.async_fetch_latest()
