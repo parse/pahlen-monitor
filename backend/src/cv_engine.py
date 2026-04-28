@@ -140,18 +140,16 @@ def summarize_led_frames(frames_by_led):
         frames = np.array(led_frames)
         on_count = np.sum(frames)
         led_on_counts[i] = on_count
+        off_count = total_frames - on_count
 
         transitions = np.sum(np.diff(frames.astype(int)) != 0)
-        if total_frames <= 10:
-            if transitions >= 1 and on_count >= 1:
-                blink_leds.append(i + 1)
-        elif transitions >= 2 and (on_count / total_frames) >= 0.1:
+        if transitions >= 2 and 2 <= on_count <= 5 and off_count >= 3:
             blink_leds.append(i + 1)
 
     led_states = [False] * 7
     if any(led_on_counts > 0):
         best_led_idx = int(np.argmax(led_on_counts))
-        if led_on_counts[best_led_idx] / total_frames >= 0.5:
+        if led_on_counts[best_led_idx] / total_frames >= 0.75:
             led_states[best_led_idx] = True
 
     return led_states, blink_leds
