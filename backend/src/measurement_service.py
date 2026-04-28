@@ -114,3 +114,46 @@ def store_cv_result(
     db.refresh(measurement)
 
     return latest_schema_from_measurement(measurement)
+
+
+def store_disabled_measurement(
+    db: Session,
+    installation_id: str,
+    captured_at: datetime | None = None,
+) -> LatestMeasurementSchema:
+    captured_at = captured_at or datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+
+    installation = db.get(Installation, installation_id)
+    if installation is None:
+        installation = Installation(id=installation_id, last_seen=now)
+        db.add(installation)
+    else:
+        installation.last_seen = now
+
+    measurement = Measurement(
+        installation_id=installation_id,
+        captured_at=captured_at,
+        chlorine_status="ok",
+        chlorine_diagnosis=None,
+        chlorine_pattern="disabled",
+        chlorine_blinking=[],
+        chlorine_solid=[],
+        chlorine_summary="Installation disabled",
+        chlorine_action=False,
+        chlorine_recommended="No action needed",
+        ph_status="ok",
+        ph_diagnosis=None,
+        ph_pattern="disabled",
+        ph_blinking=[],
+        ph_solid=[],
+        ph_summary="Installation disabled",
+        ph_action=False,
+        ph_recommended="No action needed",
+        raw_response=None,
+    )
+    db.add(measurement)
+    db.commit()
+    db.refresh(measurement)
+
+    return latest_schema_from_measurement(measurement)

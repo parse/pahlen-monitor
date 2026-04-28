@@ -15,11 +15,13 @@ CONF_PUSH_TOKEN = "push_token"
 CONF_SCAN_INTERVAL = "scan_interval"  # minutes
 CONF_POLL_INTERVAL = "poll_interval"  # minutes
 CONF_STALENESS_THRESHOLD = "staleness_threshold"  # minutes
+CONF_INSTALLATION_ENABLED = "installation_enabled"
 
 # Defaults
 DEFAULT_SCAN_INTERVAL = 60
 DEFAULT_POLL_INTERVAL = 30
 DEFAULT_STALENESS_THRESHOLD = 120
+DEFAULT_INSTALLATION_ENABLED = True
 LIGHT_WARMUP_SECONDS = 1.5
 BURST_COUNT = 8
 BURST_INTERVAL_SECONDS = 0.4
@@ -31,4 +33,4 @@ STATUS_ERROR = "error"
 STATUS_UNKNOWN = "unknown"
 
 # Platforms
-PLATFORMS = ["sensor", "binary_sensor", "button"]
+PLATFORMS = ["sensor", "binary_sensor", "button", "switch"]

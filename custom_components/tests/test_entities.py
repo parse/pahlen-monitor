@@ -3,6 +3,7 @@ import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -28,6 +29,9 @@ def stub_homeassistant_modules():
         "homeassistant.components.binary_sensor": types.ModuleType(
             "homeassistant.components.binary_sensor"
         ),
+        "homeassistant.components.switch": types.ModuleType(
+            "homeassistant.components.switch"
+        ),
         "homeassistant.components.button": types.ModuleType(
             "homeassistant.components.button"
         ),
@@ -48,6 +52,7 @@ def stub_homeassistant_modules():
     modules[
         "homeassistant.components.binary_sensor"
     ].BinarySensorDeviceClass = StubBinarySensorDeviceClass
+    modules["homeassistant.components.switch"].SwitchEntity = object
     modules["homeassistant.components.button"].ButtonEntity = object
     modules["homeassistant.config_entries"].ConfigEntry = object
     modules["homeassistant.core"].HomeAssistant = object
@@ -71,6 +76,7 @@ def load_module(module_name):
 def coordinator_data(**overrides):
     data = {
         "captured_at": "2026-04-28T18:16:36Z",
+        "installation_enabled": True,
         "stale": False,
         "error": None,
         "chlorine": {
@@ -204,3 +210,74 @@ def test_button_name_is_pahlen_prefixed():
     analyze = button.PahlenAnalyzeButton(coordinator, entry)
 
     assert analyze._attr_name == "Pahlen Analyze Now"
+
+
+@pytest.mark.asyncio
+async def test_producer_controls_reflect_installation_enabled_state():
+    button = load_module("button")
+    switch = load_module("switch")
+    entry = SimpleNamespace(entry_id="entry-1")
+    coordinator = SimpleNamespace(
+        data=coordinator_data(installation_enabled=True),
+        installation_enabled=True,
+        async_fetch_latest=AsyncMock(),
+        async_set_installation_enabled=AsyncMock(),
+    )
+
+    fetch_latest = button.PahlenFetchLatestButton(coordinator, entry)
+    installation_enabled = switch.PahlenInstallationEnabledSwitch(coordinator, entry)
+
+    assert fetch_latest._attr_name == "Pahlen Fetch Latest"
+    assert fetch_latest.available is True
+    assert installation_enabled._attr_name == "Pahlen Installation Enabled"
+    assert installation_enabled.is_on is True
+
+    await fetch_latest.async_press()
+    await installation_enabled.async_turn_off()
+
+    coordinator.async_fetch_latest.assert_awaited_once()
+    coordinator.async_set_installation_enabled.assert_awaited_once_with(False)
+
+
+def test_disabled_installation_keeps_data_non_problematic_and_buttons_offline():
+    binary_sensor = load_module("binary_sensor")
+    button = load_module("button")
+    switch = load_module("switch")
+    entry = SimpleNamespace(entry_id="entry-1")
+    coordinator = SimpleNamespace(
+        installation_enabled=False,
+        data=coordinator_data(
+            installation_enabled=False,
+            chlorine={"status": "ok"},
+            ph={"status": "ok"},
+            stale=False,
+        ),
+    )
+
+    problem = binary_sensor.PahlenProblemSensor(coordinator, entry)
+    analyze = button.PahlenAnalyzeButton(coordinator, entry)
+    fetch_latest = button.PahlenFetchLatestButton(coordinator, entry)
+    installation_enabled = switch.PahlenInstallationEnabledSwitch(coordinator, entry)
+
+    assert problem.is_on is False
+    assert analyze.available is False
+    assert fetch_latest.available is False
+    assert installation_enabled.is_on is False
+
+
+@pytest.mark.asyncio
+async def test_consumer_gets_no_producer_controls():
+    button = load_module("button")
+    switch = load_module("switch")
+    entry = SimpleNamespace(
+        entry_id="entry-1",
+        data={"role": "consumer"},
+    )
+    coordinator = SimpleNamespace(data=coordinator_data())
+    hass = SimpleNamespace(data={"pahlen_monitor": {"entry-1": coordinator}})
+    entities = []
+
+    await button.async_setup_entry(hass, entry, entities.extend)
+    await switch.async_setup_entry(hass, entry, entities.extend)
+
+    assert entities == []

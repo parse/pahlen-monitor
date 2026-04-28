@@ -26,11 +26,11 @@ Monitor your Pahlen pool dosing units using a camera and a Python backend. Home 
 ## Backend Flow
 - Producers send camera bursts to `POST /api/analyze/{installation_id}/burst` with the configured bearer token.
 - The backend analyzes the images, stores the reading, and returns the same response shape used by `GET /latest/{installation_id}`.
-- Consumers continue polling `GET /latest/{installation_id}`.
+- Consumers continue polling `GET /latest/{installation_id}` with the configured bearer token.
 
 ### 2. Configuration
-- **Producer:** Add the integration and select "Producer". You'll need your camera entity, spotlight entity, backend URL, push token, and installation ID.
-- **Consumer:** Add the integration and select "Consumer". You only need the backend URL and the same Installation ID as the producer.
+- **Producer:** Add the integration and select "Producer". You'll need your camera entity, spotlight entity, backend URL, push token, and installation ID. Producer installations also expose `button.dosing_fetch_latest`, `button.dosing_analyze_now`, and `switch.installation_enabled`.
+- **Consumer:** Add the integration and select "Consumer". You'll need the backend URL, push token, and the same Installation ID as the producer. Consumer installations expose only the read-only sensors and problem sensor.
 
 ## Entities
 | Entity | Role | Description |
@@ -40,6 +40,8 @@ Monitor your Pahlen pool dosing units using a camera and a Python backend. Home 
 | `sensor.ph_dosing_status` | Both | Status (ok, warning, error) |
 | `sensor.ph_dosing_action` | Both | Whether action is required |
 | `binary_sensor.dosing_problem` | Both | Turns on if status is warning/error or data is stale |
+| `switch.installation_enabled` | Producer | Enable or disable the installation |
+| `button.dosing_fetch_latest` | Producer | Fetch the latest backend reading |
 | `button.dosing_analyze_now` | Producer | Trigger analysis manually |
 
 ## License

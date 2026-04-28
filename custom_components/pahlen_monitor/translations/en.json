@@ -22,6 +22,7 @@
         "title": "Consumer configuration",
         "data": {
           "installation_id": "Installation ID",
+          "push_token": "Push Token",
           "backend_url": "Backend URL",
           "poll_interval": "Poll interval (minutes)",
           "staleness_threshold": "Staleness threshold (minutes)"

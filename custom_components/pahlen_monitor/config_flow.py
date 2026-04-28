@@ -122,6 +122,7 @@ class PahlenMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_INSTALLATION_ID): str,
+                    vol.Required(CONF_PUSH_TOKEN): str,
                     vol.Required(CONF_BACKEND_URL): str,
                     vol.Optional(
                         CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL

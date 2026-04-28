@@ -1,4 +1,4 @@
-import asyncio  # Added import for asyncio
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -14,14 +14,17 @@ from .const import (
     BURST_INTERVAL_SECONDS,
     CONF_BACKEND_URL,
     CONF_CAMERA_ENTITY,
+    CONF_INSTALLATION_ENABLED,
     CONF_INSTALLATION_ID,
     CONF_LIGHT_ENTITY,
     CONF_POLL_INTERVAL,
     CONF_PUSH_TOKEN,
     CONF_SCAN_INTERVAL,
     CONF_STALENESS_THRESHOLD,
+    DEFAULT_INSTALLATION_ENABLED,
     DOMAIN,
     LIGHT_WARMUP_SECONDS,
+    STATUS_OK,
     STATUS_UNKNOWN,
 )
 from .contract_validation import (
@@ -77,6 +80,31 @@ def unknown_data() -> PahlenData:
     }
 
 
+def disabled_data(installation_id: str = "") -> PahlenData:
+    """Return data for a seasonally disabled installation."""
+    unit = {
+        "status": STATUS_OK,
+        "diagnosis": "Installation disabled",
+        "pattern_detected": "disabled",
+        "blinking_leds": [],
+        "solid_leds": [],
+        "summary": "Installation disabled for the season",
+        "action_required": False,
+        "recommended_action": "No action required",
+    }
+    now = datetime.now(tz=timezone.utc).isoformat()
+    return {
+        "installation_id": installation_id,
+        "pushed_at": now,
+        "raw_response": None,
+        "chlorine": unit.copy(),
+        "ph": unit.copy(),
+        "captured_at": now,
+        "stale": False,
+        "error": None,
+    }
+
+
 class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
     """Data coordinator for the producer role."""
 
@@ -95,8 +123,22 @@ class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
         self._installation_id = entry.data[CONF_INSTALLATION_ID]
         self._staleness_minutes = entry.data[CONF_STALENESS_THRESHOLD]
 
+    @property
+    def installation_enabled(self) -> bool:
+        return self._entry.options.get(
+            CONF_INSTALLATION_ENABLED, DEFAULT_INSTALLATION_ENABLED
+        )
+
+    def _auth_headers(self) -> dict[str, str]:
+        token = self._entry.data.get(CONF_PUSH_TOKEN)
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
     async def _async_update_data(self) -> PahlenData:
         try:
+            if not self.installation_enabled:
+                _LOGGER.debug("Producer analysis skipped because installation disabled")
+                return disabled_data(self._installation_id)
+
             _LOGGER.debug("Starting producer analysis via backend")
 
             # 1. Capture Images (Burst)
@@ -142,9 +184,6 @@ class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
 
             # 2. Call the new FastAPI backend endpoint for analysis
             async with aiohttp.ClientSession() as session:
-                token = self._entry.data.get(CONF_PUSH_TOKEN)
-                headers = {"Authorization": f"Bearer {token}"} if token else {}
-
                 # Prepare multipart/form-data
                 data = aiohttp.FormData()
                 for i, image in enumerate(images):
@@ -158,7 +197,7 @@ class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
                 async with session.post(
                     f"{self._backend_url}/api/analyze/{self._installation_id}/burst",
                     data=data,
-                    headers=headers,
+                    headers=self._auth_headers(),
                     timeout=60,
                 ) as response:
                     response_body = await response.text()
@@ -187,6 +226,76 @@ class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
         except Exception as exc:
             _LOGGER.exception("Error in producer update")
             raise UpdateFailed(f"Analysis failed: {exc}") from exc
+
+    async def async_fetch_latest(self) -> None:
+        """Fetch the latest backend measurement without taking new camera images."""
+        remote_data = await self._async_fetch_latest_data()
+        self.async_set_updated_data(remote_data)
+
+    async def _async_fetch_latest_data(self) -> PahlenData:
+        try:
+            _LOGGER.debug("Fetching latest backend data for producer")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self._backend_url}/latest/{self._installation_id}",
+                    headers=self._auth_headers(),
+                    timeout=10,
+                ) as response:
+                    if response.status == 404:
+                        return unknown_data()
+                    if response.status != 200:
+                        raise UpdateFailed(f"Backend returned status {response.status}")
+
+                    remote_data = validate_latest_measurement(await response.json())
+                    return {
+                        **remote_data,
+                        "stale": compute_stale(
+                            remote_data.get("captured_at"), self._staleness_minutes
+                        ),
+                        "error": None,
+                    }
+        except Exception as exc:
+            _LOGGER.exception("Error fetching latest backend data")
+            if isinstance(exc, UpdateFailed):
+                raise
+            raise UpdateFailed(f"Failed to fetch latest data: {exc}") from exc
+
+    async def async_set_installation_enabled(self, enabled: bool) -> None:
+        """Persist installation enabled state and publish matching coordinator data."""
+        new_options = dict(self._entry.options)
+        new_options[CONF_INSTALLATION_ENABLED] = enabled
+        self.hass.config_entries.async_update_entry(self._entry, options=new_options)
+
+        if enabled:
+            await self.async_request_refresh()
+            return
+
+        await self._async_store_disabled_state()
+        self.async_set_updated_data(disabled_data(self._installation_id))
+
+    async def _async_store_disabled_state(self) -> None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self._backend_url}/installations/{self._installation_id}/disabled",
+                    headers=self._auth_headers(),
+                    timeout=10,
+                ) as response:
+                    response_body = await response.text()
+                    if response.status != 200:
+                        _LOGGER.error(
+                            "Backend disabled-state update failed: %s %s",
+                            response.status,
+                            response_body,
+                        )
+                        raise UpdateFailed(
+                            f"Backend disabled-state update failed: {response.status}"
+                        )
+        except Exception as exc:
+            _LOGGER.exception("Error storing disabled state")
+            if isinstance(exc, UpdateFailed):
+                raise
+            raise UpdateFailed(f"Failed to store disabled state: {exc}") from exc
 
 
 class ConsumerCoordinator(DataUpdateCoordinator[PahlenData]):
