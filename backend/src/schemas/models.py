@@ -15,13 +15,6 @@ class UnitAnalysis(BaseModel):
     recommended_action: str
 
 
-class PushBodySchema(BaseModel):
-    captured_at: datetime
-    chlorine: UnitAnalysis
-    ph: UnitAnalysis
-    raw_response: str | None = None
-
-
 class LatestMeasurementSchema(BaseModel):
     installation_id: str
     captured_at: datetime | None = None
