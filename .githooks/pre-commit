@@ -23,9 +23,10 @@ run_check() {
   fi
 }
 
-run_check "Python: ruff" "python -m ruff check custom_components backend"
-run_check "Python: format" "python -m ruff format --check custom_components backend"
+run_check "Python: ruff" "python -m ruff check custom_components backend scripts"
+run_check "Python: format" "python -m ruff format --check custom_components backend scripts"
 run_check "Python: mypy" "python -m mypy backend/src custom_components/pahlen_monitor"
+run_check "Python: api types" "python scripts/generate_api_types.py --check"
 run_check "Python: tests" "PYTHONPATH=backend/src DATABASE_URL=sqlite+pysqlite:///:memory: PUSH_TOKEN=test-token python -m pytest"
 
 if [ -n "$FAILED" ]; then
@@ -42,6 +43,7 @@ if [ -n "$FAILED" ]; then
       "Python: ruff") echo "Fix: Fix ruff issues" ;;
       "Python: format") echo "Fix: Fix ruff format issues" ;;
       "Python: mypy") echo "Fix: Fix type errors" ;;
+      "Python: api types") echo "Fix: Regenerate API types with scripts/generate_api_types.py" ;;
       "Python: tests") echo "Fix: Fix failing tests" ;;
     esac
     echo ""
