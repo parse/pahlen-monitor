@@ -105,7 +105,9 @@ def load_api_client():
 async def test_get_latest_uses_auth_headers_and_validates_response():
     api_client = load_api_client()
     FakeSession.responses = [FakeResponse(payload=sample_measurement())]
-    client = api_client.PahlenApiClient("https://backend.example/", "secret")
+    client = api_client.PahlenApiClient(
+        "https://backend.example/", "secret", FakeSession()
+    )
 
     data = await client.get_latest("pool-1")
 
@@ -124,7 +126,7 @@ async def test_get_latest_uses_auth_headers_and_validates_response():
 async def test_get_latest_raises_not_found_for_404():
     api_client = load_api_client()
     FakeSession.responses = [FakeResponse(status=404)]
-    client = api_client.PahlenApiClient("https://backend.example", None)
+    client = api_client.PahlenApiClient("https://backend.example", None, FakeSession())
 
     with pytest.raises(api_client.PahlenApiNotFound):
         await client.get_latest("pool-1")
@@ -134,7 +136,7 @@ async def test_get_latest_raises_not_found_for_404():
 async def test_non_200_response_includes_status_and_body():
     api_client = load_api_client()
     FakeSession.responses = [FakeResponse(status=500, text="boom")]
-    client = api_client.PahlenApiClient("https://backend.example", None)
+    client = api_client.PahlenApiClient("https://backend.example", None, FakeSession())
 
     with pytest.raises(api_client.PahlenApiError, match="500 boom"):
         await client.store_disabled_state("pool-1")
@@ -144,7 +146,9 @@ async def test_non_200_response_includes_status_and_body():
 async def test_analyze_burst_uploads_multipart_images():
     api_client = load_api_client()
     FakeSession.responses = [FakeResponse(payload=sample_measurement())]
-    client = api_client.PahlenApiClient("https://backend.example", "secret")
+    client = api_client.PahlenApiClient(
+        "https://backend.example", "secret", FakeSession()
+    )
     image = SimpleNamespace(content=b"image-bytes", content_type="image/jpeg")
 
     await client.analyze_burst("pool-1", [image])

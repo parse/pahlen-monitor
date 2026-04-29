@@ -132,3 +132,14 @@ def test_analyze_burst_endpoint_no_files():
     )
 
     assert response.status_code == 422
+
+
+def test_analyze_burst_endpoint_rejects_undecodable_image():
+    response = client.post(
+        "/api/analyze/test-installation/burst",
+        headers={"Authorization": "Bearer test-token"},
+        files=[("files", ("frame.jpg", b"not an image", "image/jpeg"))],
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Could not decode image bytes"

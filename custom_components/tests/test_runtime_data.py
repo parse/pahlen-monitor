@@ -39,6 +39,9 @@ def stub_modules():
         ),
         "homeassistant.core": types.ModuleType("homeassistant.core"),
         "homeassistant.helpers": types.ModuleType("homeassistant.helpers"),
+        "homeassistant.helpers.aiohttp_client": types.ModuleType(
+            "homeassistant.helpers.aiohttp_client"
+        ),
         "homeassistant.helpers.entity_platform": types.ModuleType(
             "homeassistant.helpers.entity_platform"
         ),
@@ -109,6 +112,9 @@ def stub_modules():
     modules["homeassistant.config_entries"].ConfigEntry = StubConfigEntry
     modules["homeassistant.config_entries"].ConfigFlow = StubConfigFlow
     modules["homeassistant.core"].HomeAssistant = object
+    modules["homeassistant.helpers.aiohttp_client"].async_get_clientsession = (
+        lambda hass: None
+    )
     modules["homeassistant.helpers.entity_platform"].AddEntitiesCallback = object
     modules["homeassistant.helpers.selector"].EntitySelector = StubEntitySelector
     modules[
@@ -366,6 +372,43 @@ async def test_config_flow_reports_backend_connection_failure(monkeypatch):
     assert result["step_id"] == "consumer"
     assert result["errors"] == {"base": "cannot_connect"}
     backend.assert_awaited_once_with("http://backend")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "expected"), [(200, True), (500, False)])
+async def test_config_flow_backend_check_uses_shared_session(
+    monkeypatch, status, expected
+):
+    config_flow = load_module("config_flow")
+    flow = make_flow(config_flow)
+
+    class FakeResponse:
+        def __init__(self, response_status):
+            self.status = response_status
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, **kwargs):
+            self.calls.append((url, kwargs))
+            return FakeResponse(status)
+
+    session = FakeSession()
+    monkeypatch.setattr(
+        config_flow,
+        "async_get_clientsession",
+        lambda hass: session,
+    )
+
+    assert await flow._test_backend_url("http://backend/") is expected
+    assert session.calls == [("http://backend/health", {"timeout": 10})]
 
 
 @pytest.mark.asyncio

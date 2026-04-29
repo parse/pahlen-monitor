@@ -3,10 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_BACKEND_URL,
@@ -144,10 +144,8 @@ class PahlenMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_backend_url(self, url: str) -> bool:
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{url.rstrip('/')}/health", timeout=10
-                ) as response:
-                    return bool(response.status == 200)
+            session = async_get_clientsession(self.hass)
+            async with session.get(f"{url.rstrip('/')}/health", timeout=10) as response:
+                return bool(response.status == 200)
         except Exception:
             return False

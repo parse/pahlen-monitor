@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from homeassistant.components import camera
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api_client import PahlenApiClient, PahlenApiNotFound
@@ -116,7 +117,9 @@ class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
         self._installation_id = entry_data["installation_id"]
         self._staleness_minutes = entry_data["staleness_threshold"]
         self._api_client = PahlenApiClient(
-            entry_data["backend_url"], entry_data.get("push_token")
+            entry_data["backend_url"],
+            entry_data.get("push_token"),
+            async_get_clientsession(hass),
         )
 
     @property
@@ -255,7 +258,9 @@ class ConsumerCoordinator(DataUpdateCoordinator[PahlenData]):
         self._installation_id = entry_data["installation_id"]
         self._staleness_minutes = entry_data["staleness_threshold"]
         self._api_client = PahlenApiClient(
-            entry_data["backend_url"], entry_data.get("push_token")
+            entry_data["backend_url"],
+            entry_data.get("push_token"),
+            async_get_clientsession(hass),
         )
 
     async def _async_update_data(self) -> PahlenData:

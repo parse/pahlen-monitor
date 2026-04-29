@@ -12,6 +12,8 @@ from schemas.models import (
 _LOGGER = logging.getLogger(__name__)
 DeviceName = Literal["chlorine", "ph"]
 RoiMap = dict[DeviceName, list[list[int]]]
+DEVICE_NAMES: tuple[DeviceName, DeviceName] = ("chlorine", "ph")
+LED_COUNT = 7
 TIMEOUT_BLINK_LEDS = [1, 2, 3, 5, 6, 7]
 
 CROP_X = 3500
@@ -47,6 +49,25 @@ COLOR_MASKS = {
     "YELLOW": [((20, 100, 100), (35, 255, 255))],
     "GREEN": [((40, 100, 100), (85, 255, 255))],
 }
+LED_COLOR_MASK_RATIO_THRESHOLD = 0.25
+BRIGHT_LED_MASK_LOWER = (0, 0, 200)
+BRIGHT_LED_MASK_UPPER = (180, 80, 255)
+SOLID_LED_FRAME_RATIO_THRESHOLD = 0.75
+BLINK_MIN_TRANSITIONS = 2
+BLINK_MIN_ON_FRAMES = 2
+BLINK_MAX_ON_FRAMES = 5
+BLINK_MIN_OFF_FRAMES = 3
+PH_TIMEOUT_BAND_Y = slice(210, 270)
+PH_TIMEOUT_BAND_X = slice(1040, 1230)
+PH_TIMEOUT_COLOR_RATIO_THRESHOLD = 0.02
+PH_TIMEOUT_MIN_RED_OR_YELLOW_FRAMES = 3
+PH_TIMEOUT_MIN_GREEN_FRAMES = 2
+PRIVACY_PANEL_Y = slice(120, 310)
+PRIVACY_PANEL_X = slice(450, 1250)
+PRIVACY_COLORFUL_SATURATION_THRESHOLD = 80
+PRIVACY_COLORFUL_VALUE_THRESHOLD = 80
+PRIVACY_COLORFUL_RATIO_THRESHOLD = 0.01
+PRIVACY_TIMEOUT_MIN_FRAME_RATIO = 0.7
 
 SHIFTED_ROIS: RoiMap = {
     device: [[x + 50, y, w, h] for x, y, w, h in rois] for device, rois in ROIS.items()
@@ -82,6 +103,55 @@ def get_led_color(idx: int) -> Literal["RED", "YELLOW", "GREEN"]:
     return "YELLOW"
 
 
+def mask_ratio(mask: np.ndarray, area: int) -> float:
+    import cv2
+
+    return float(cv2.countNonZero(mask) / area)
+
+
+def color_mask_ratio(
+    hsv_area: np.ndarray, color_type: str, denominator: int | None = None
+) -> float:
+    import cv2
+
+    area = denominator or hsv_area.shape[0] * hsv_area.shape[1]
+    return sum(
+        mask_ratio(cv2.inRange(hsv_area, np.array(lower), np.array(upper)), area)
+        for lower, upper in COLOR_MASKS[color_type]
+    )
+
+
+def is_led_lit(roi_hsv: np.ndarray, color_type: str) -> bool:
+    import cv2
+
+    area = roi_hsv.shape[0] * roi_hsv.shape[1]
+    color_is_lit = any(
+        mask_ratio(cv2.inRange(roi_hsv, np.array(lower), np.array(upper)), area)
+        > LED_COLOR_MASK_RATIO_THRESHOLD
+        for lower, upper in COLOR_MASKS[color_type]
+    )
+    if color_is_lit:
+        return True
+
+    bright_mask = cv2.inRange(
+        roi_hsv,
+        np.array(BRIGHT_LED_MASK_LOWER),
+        np.array(BRIGHT_LED_MASK_UPPER),
+    )
+    return mask_ratio(bright_mask, area) > LED_COLOR_MASK_RATIO_THRESHOLD
+
+
+def empty_unit_payload() -> CVUnitAnalysisPayload:
+    return {
+        "level": None,
+        "mode": "unknown",
+        "status": "unknown",
+        "diagnosis": "Unknown pattern",
+        "led_states": [False] * LED_COUNT,
+        "blinking": [],
+    }
+
+
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
     import cv2
 
@@ -107,40 +177,18 @@ def detect_led_on_frames(
     import cv2
 
     led_on_frames: dict[DeviceName, list[list[bool]]] = {
-        "chlorine": [[] for _ in range(7)],
-        "ph": [[] for _ in range(7)],
+        "chlorine": [[] for _ in range(LED_COUNT)],
+        "ph": [[] for _ in range(LED_COUNT)],
     }
 
     for img in processed_images:
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        for device in ("chlorine", "ph"):
+        for device in DEVICE_NAMES:
             for i, roi in enumerate(rois[device]):
                 x, y, w, h = roi
                 roi_hsv = hsv[y : y + h, x : x + w]
-
-                color_type = get_led_color(i)
-                masks = COLOR_MASKS[color_type]
-
-                is_lit = False
-                for lower, upper in masks:
-                    mask = cv2.inRange(roi_hsv, np.array(lower), np.array(upper))
-
-                    ratio = cv2.countNonZero(mask) / (w * h)
-                    if ratio > 0.25:
-                        is_lit = True
-                        break
-
-                if not is_lit:
-                    bright_mask = cv2.inRange(
-                        roi_hsv,
-                        np.array((0, 0, 200)),
-                        np.array((180, 80, 255)),
-                    )
-                    bright_ratio = cv2.countNonZero(bright_mask) / (w * h)
-                    is_lit = bright_ratio > 0.25
-
-                led_on_frames[device][i].append(is_lit)
+                led_on_frames[device][i].append(is_led_lit(roi_hsv, get_led_color(i)))
 
     return led_on_frames
 
@@ -149,7 +197,7 @@ def summarize_led_frames(
     frames_by_led: list[list[bool]],
 ) -> tuple[list[bool], list[int]]:
     total_frames = len(frames_by_led[0])
-    led_on_counts = np.zeros(7)
+    led_on_counts = np.zeros(LED_COUNT)
     blink_leds = []
 
     for i, led_frames in enumerate(frames_by_led):
@@ -159,13 +207,20 @@ def summarize_led_frames(
         off_count = total_frames - on_count
 
         transitions = np.sum(np.diff(frames.astype(int)) != 0)
-        if transitions >= 2 and 2 <= on_count <= 5 and off_count >= 3:
+        if (
+            transitions >= BLINK_MIN_TRANSITIONS
+            and BLINK_MIN_ON_FRAMES <= on_count <= BLINK_MAX_ON_FRAMES
+            and off_count >= BLINK_MIN_OFF_FRAMES
+        ):
             blink_leds.append(i + 1)
 
-    led_states = [False] * 7
+    led_states = [False] * LED_COUNT
     if any(led_on_counts > 0):
         best_led_idx = int(np.argmax(led_on_counts))
-        if led_on_counts[best_led_idx] / total_frames >= 0.75:
+        if (
+            led_on_counts[best_led_idx] / total_frames
+            >= SOLID_LED_FRAME_RATIO_THRESHOLD
+        ):
             led_states[best_led_idx] = True
 
     return led_states, blink_leds
@@ -262,25 +317,22 @@ def detect_shifted_ph_timeout(processed_images: list[np.ndarray]) -> bool:
 
     for img in processed_images:
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        timeout_band = hsv[210:270, 1040:1230]
+        timeout_band = hsv[PH_TIMEOUT_BAND_Y, PH_TIMEOUT_BAND_X]
 
-        red_or_yellow_ratio = 0.0
-        for color in ["RED", "YELLOW"]:
-            for lower, upper in COLOR_MASKS[color]:
-                mask = cv2.inRange(timeout_band, np.array(lower), np.array(upper))
-                red_or_yellow_ratio += cv2.countNonZero(mask) / timeout_band.size
+        red_or_yellow_ratio = color_mask_ratio(
+            timeout_band, "RED", timeout_band.size
+        ) + color_mask_ratio(timeout_band, "YELLOW", timeout_band.size)
+        green_ratio = color_mask_ratio(timeout_band, "GREEN", timeout_band.size)
 
-        green_ratio = 0.0
-        for lower, upper in COLOR_MASKS["GREEN"]:
-            mask = cv2.inRange(timeout_band, np.array(lower), np.array(upper))
-            green_ratio += cv2.countNonZero(mask) / timeout_band.size
-
-        if red_or_yellow_ratio > 0.02:
+        if red_or_yellow_ratio > PH_TIMEOUT_COLOR_RATIO_THRESHOLD:
             red_or_yellow_frames += 1
-        if green_ratio > 0.02:
+        if green_ratio > PH_TIMEOUT_COLOR_RATIO_THRESHOLD:
             green_frames += 1
 
-    return red_or_yellow_frames >= 3 and green_frames >= 2
+    return (
+        red_or_yellow_frames >= PH_TIMEOUT_MIN_RED_OR_YELLOW_FRAMES
+        and green_frames >= PH_TIMEOUT_MIN_GREEN_FRAMES
+    )
 
 
 def timeout_ph_result() -> CVUnitAnalysisPayload:
@@ -289,7 +341,7 @@ def timeout_ph_result() -> CVUnitAnalysisPayload:
         "mode": "error",
         "status": "error",
         "diagnosis": "Time-out (dosing stopped)",
-        "led_states": [False, False, False, False, False, False, False],
+        "led_states": [False] * LED_COUNT,
         "blinking": list(TIMEOUT_BLINK_LEDS),
     }
 
@@ -297,7 +349,10 @@ def timeout_ph_result() -> CVUnitAnalysisPayload:
 def detect_privacy_mask_ph_timeout(processed_images: list[np.ndarray]) -> bool:
     frames_by_led = detect_led_on_frames(processed_images, PRIVACY_MASK_ROIS)["ph"]
     total_frames = len(frames_by_led[0])
-    min_on_frames = max(2, int(np.ceil(total_frames * 0.7)))
+    min_on_frames = max(
+        BLINK_MIN_ON_FRAMES,
+        int(np.ceil(total_frames * PRIVACY_TIMEOUT_MIN_FRAME_RATIO)),
+    )
 
     return all(
         sum(frames_by_led[led - 1]) >= min_on_frames for led in TIMEOUT_BLINK_LEDS
@@ -310,15 +365,19 @@ def is_grayscale_privacy_frame(processed_images: list[np.ndarray]) -> bool:
     colorful_ratios = []
     for img in processed_images:
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        panel_area = hsv[120:310, 450:1250]
+        panel_area = hsv[PRIVACY_PANEL_Y, PRIVACY_PANEL_X]
         saturation = panel_area[:, :, 1]
         value = panel_area[:, :, 2]
-        colorful_ratio = np.count_nonzero((saturation > 80) & (value > 80)) / (
-            saturation.size
+        colorful_ratio = (
+            np.count_nonzero(
+                (saturation > PRIVACY_COLORFUL_SATURATION_THRESHOLD)
+                & (value > PRIVACY_COLORFUL_VALUE_THRESHOLD)
+            )
+            / saturation.size
         )
         colorful_ratios.append(colorful_ratio)
 
-    return bool(max(colorful_ratios, default=0) < 0.01)
+    return bool(max(colorful_ratios, default=0) < PRIVACY_COLORFUL_RATIO_THRESHOLD)
 
 
 def analyze_with_rois(
@@ -326,25 +385,11 @@ def analyze_with_rois(
 ) -> CVAnalysisResult:
     led_on_frames = detect_led_on_frames(processed_images, rois)
     final_results: CVAnalysisResult = {
-        "chlorine": {
-            "level": None,
-            "mode": "unknown",
-            "status": "unknown",
-            "diagnosis": "Unknown pattern",
-            "led_states": [False] * 7,
-            "blinking": [],
-        },
-        "ph": {
-            "level": None,
-            "mode": "unknown",
-            "status": "unknown",
-            "diagnosis": "Unknown pattern",
-            "led_states": [False] * 7,
-            "blinking": [],
-        },
+        "chlorine": empty_unit_payload(),
+        "ph": empty_unit_payload(),
     }
 
-    for device in ("chlorine", "ph"):
+    for device in DEVICE_NAMES:
         led_states, blink_leds = summarize_led_frames(led_on_frames[device])
         result = build_result(device, led_states, blink_leds)
 
@@ -357,20 +402,31 @@ def analyze_with_rois(
     return final_results
 
 
+def candidate_roi_sets(processed_images: list[np.ndarray]) -> list[RoiMap]:
+    candidate_sets = [SHIFTED_ROIS]
+    if is_grayscale_privacy_frame(processed_images):
+        candidate_sets.append(PRIVACY_MASK_ROIS)
+    return candidate_sets
+
+
+def best_analysis_result(
+    processed_images: list[np.ndarray], initial_result: CVAnalysisResult
+) -> CVAnalysisResult:
+    result = initial_result
+    for candidate_rois in candidate_roi_sets(processed_images):
+        candidate_result = analyze_with_rois(processed_images, candidate_rois)
+        if result_score(candidate_result) > result_score(result):
+            result = candidate_result
+    return result
+
+
 def analyze_burst(images_bytes: list[bytes], rois: RoiMap = ROIS) -> CVAnalysisResult:
     processed_images = [preprocess_image(img) for img in images_bytes]
 
     result = analyze_with_rois(processed_images, rois)
 
     if rois is ROIS:
-        candidate_sets = [SHIFTED_ROIS]
-        if is_grayscale_privacy_frame(processed_images):
-            candidate_sets.append(PRIVACY_MASK_ROIS)
-
-        for candidate_rois in candidate_sets:
-            candidate_result = analyze_with_rois(processed_images, candidate_rois)
-            if result_score(candidate_result) > result_score(result):
-                result = candidate_result
+        result = best_analysis_result(processed_images, result)
 
     if detect_shifted_ph_timeout(processed_images) or (
         rois is ROIS

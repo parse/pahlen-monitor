@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import aiohttp
 
 from .camera_payload import CameraPayload
@@ -19,24 +17,26 @@ class PahlenApiNotFound(PahlenApiError):
 class PahlenApiClient:
     """Small Home Assistant-friendly aiohttp client for the backend API."""
 
-    def __init__(self, backend_url: str, token: str | None) -> None:
+    def __init__(
+        self, backend_url: str, token: str | None, session: aiohttp.ClientSession
+    ) -> None:
         self._backend_url = backend_url.rstrip("/")
         self._token = token
+        self._session = session
 
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"} if self._token else {}
 
     async def get_latest(self, installation_id: str) -> LatestMeasurement:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self._backend_url}/latest/{installation_id}",
-                headers=self._auth_headers(),
-                timeout=10,
-            ) as response:
-                if response.status == 404:
-                    raise PahlenApiNotFound("No data found for installation")
-                await self._raise_for_status(response, "Backend latest fetch failed")
-                return validate_latest_measurement(await response.json())
+        async with self._session.get(
+            f"{self._backend_url}/latest/{installation_id}",
+            headers=self._auth_headers(),
+            timeout=10,
+        ) as response:
+            if response.status == 404:
+                raise PahlenApiNotFound("No data found for installation")
+            await self._raise_for_status(response, "Backend latest fetch failed")
+            return validate_latest_measurement(await response.json())
 
     async def analyze_burst(
         self, installation_id: str, images: list[CameraPayload]
@@ -50,29 +50,29 @@ class PahlenApiClient:
                 content_type=image.content_type,
             )
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self._backend_url}/api/analyze/{installation_id}/burst",
-                data=form_data,
-                headers=self._auth_headers(),
-                timeout=60,
-            ) as response:
-                await self._raise_for_status(response, "Backend analysis failed")
-                return validate_latest_measurement(await response.json())
+        async with self._session.post(
+            f"{self._backend_url}/api/analyze/{installation_id}/burst",
+            data=form_data,
+            headers=self._auth_headers(),
+            timeout=60,
+        ) as response:
+            await self._raise_for_status(response, "Backend analysis failed")
+            return validate_latest_measurement(await response.json())
 
     async def store_disabled_state(self, installation_id: str) -> LatestMeasurement:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self._backend_url}/installations/{installation_id}/disabled",
-                headers=self._auth_headers(),
-                timeout=10,
-            ) as response:
-                await self._raise_for_status(
-                    response, "Backend disabled-state update failed"
-                )
-                return validate_latest_measurement(await response.json())
+        async with self._session.post(
+            f"{self._backend_url}/installations/{installation_id}/disabled",
+            headers=self._auth_headers(),
+            timeout=10,
+        ) as response:
+            await self._raise_for_status(
+                response, "Backend disabled-state update failed"
+            )
+            return validate_latest_measurement(await response.json())
 
-    async def _raise_for_status(self, response: Any, message: str) -> None:
+    async def _raise_for_status(
+        self, response: aiohttp.ClientResponse, message: str
+    ) -> None:
         if response.status == 200:
             return
 
