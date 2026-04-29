@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
 import aiohttp
 from homeassistant.components import camera
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -12,15 +13,7 @@ from .camera_payload import normalize_camera_payload
 from .const import (
     BURST_COUNT,
     BURST_INTERVAL_SECONDS,
-    CONF_BACKEND_URL,
-    CONF_CAMERA_ENTITY,
     CONF_INSTALLATION_ENABLED,
-    CONF_INSTALLATION_ID,
-    CONF_LIGHT_ENTITY,
-    CONF_POLL_INTERVAL,
-    CONF_PUSH_TOKEN,
-    CONF_SCAN_INTERVAL,
-    CONF_STALENESS_THRESHOLD,
     DEFAULT_INSTALLATION_ENABLED,
     DOMAIN,
     LIGHT_WARMUP_SECONDS,
@@ -29,8 +22,10 @@ from .const import (
 )
 from .contract_validation import (
     PahlenData,
+    UnitAnalysis,
     validate_latest_measurement,
 )
+from .entry_types import PahlenConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,7 +77,7 @@ def unknown_data() -> PahlenData:
 
 def disabled_data(installation_id: str = "") -> PahlenData:
     """Return data for a seasonally disabled installation."""
-    unit = {
+    unit: UnitAnalysis = {
         "status": STATUS_OK,
         "diagnosis": "Installation disabled",
         "pattern_detected": "disabled",
@@ -108,29 +103,29 @@ def disabled_data(installation_id: str = "") -> PahlenData:
 class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
     """Data coordinator for the producer role."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
-        interval_minutes = entry.data[
-            CONF_SCAN_INTERVAL
-        ]  # Assuming SCAN_INTERVAL is for producer
+    def __init__(self, hass: HomeAssistant, entry: PahlenConfigEntry):
+        entry_data = entry.data
+        interval_minutes = entry_data["scan_interval"]
         super().__init__(
             hass,
             logger=_LOGGER,
-            name=f"{DOMAIN}_producer_{entry.data[CONF_INSTALLATION_ID]}",
+            name=f"{DOMAIN}_producer_{entry_data['installation_id']}",
             update_interval=timedelta(minutes=interval_minutes),
         )
         self._entry = entry
-        self._backend_url = entry.data[CONF_BACKEND_URL].rstrip("/")
-        self._installation_id = entry.data[CONF_INSTALLATION_ID]
-        self._staleness_minutes = entry.data[CONF_STALENESS_THRESHOLD]
+        self._entry_data = entry_data
+        self._backend_url = entry_data["backend_url"].rstrip("/")
+        self._installation_id = entry_data["installation_id"]
+        self._staleness_minutes = entry_data["staleness_threshold"]
 
     @property
     def installation_enabled(self) -> bool:
         return self._entry.options.get(
-            CONF_INSTALLATION_ENABLED, DEFAULT_INSTALLATION_ENABLED
+            "installation_enabled", DEFAULT_INSTALLATION_ENABLED
         )
 
     def _auth_headers(self) -> dict[str, str]:
-        token = self._entry.data.get(CONF_PUSH_TOKEN)
+        token = self._entry_data.get("push_token")
         return {"Authorization": f"Bearer {token}"} if token else {}
 
     async def _async_update_data(self) -> PahlenData:
@@ -142,10 +137,8 @@ class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
             _LOGGER.debug("Starting producer analysis via backend")
 
             # 1. Capture Images (Burst)
-            camera_entity_id = self._entry.data.get(CONF_CAMERA_ENTITY)
-            light_entity_id = self._entry.data.get(
-                CONF_LIGHT_ENTITY
-            )  # Assuming light entity is configured
+            camera_entity_id = self._entry_data.get("camera_entity")
+            light_entity_id = self._entry_data.get("light_entity")
 
             if not camera_entity_id:
                 _LOGGER.error(
@@ -301,24 +294,26 @@ class ProducerCoordinator(DataUpdateCoordinator[PahlenData]):
 class ConsumerCoordinator(DataUpdateCoordinator[PahlenData]):
     """Data coordinator for the consumer role."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
-        interval_minutes = entry.data[CONF_POLL_INTERVAL]
+    def __init__(self, hass: HomeAssistant, entry: PahlenConfigEntry):
+        entry_data = entry.data
+        interval_minutes = entry_data["poll_interval"]
         super().__init__(
             hass,
             logger=_LOGGER,
-            name=f"{DOMAIN}_consumer_{entry.data[CONF_INSTALLATION_ID]}",
+            name=f"{DOMAIN}_consumer_{entry_data['installation_id']}",
             update_interval=timedelta(minutes=interval_minutes),
         )
         self._entry = entry
-        self._backend_url = entry.data[CONF_BACKEND_URL].rstrip("/")
-        self._installation_id = entry.data[CONF_INSTALLATION_ID]
-        self._staleness_minutes = entry.data[CONF_STALENESS_THRESHOLD]
+        self._entry_data = entry_data
+        self._backend_url = entry_data["backend_url"].rstrip("/")
+        self._installation_id = entry_data["installation_id"]
+        self._staleness_minutes = entry_data["staleness_threshold"]
 
     async def _async_update_data(self) -> PahlenData:
         try:
             _LOGGER.debug("Polling backend for latest data: %s", self._backend_url)
             async with aiohttp.ClientSession() as session:
-                token = self._entry.data.get(CONF_PUSH_TOKEN)
+                token = self._entry_data.get("push_token")
                 headers = {"Authorization": f"Bearer {token}"} if token else {}
 
                 async with session.get(
@@ -349,3 +344,6 @@ class ConsumerCoordinator(DataUpdateCoordinator[PahlenData]):
             if isinstance(exc, UpdateFailed):
                 raise
             raise UpdateFailed(f"Failed to fetch data: {exc}") from exc
+
+
+PahlenCoordinator = ProducerCoordinator | ConsumerCoordinator
