@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -24,7 +25,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = require_runtime_coordinator(entry)
 
-    entities: list[SensorEntity] = []
+    entities: list[SensorEntity] = [PahlenLastCalibrationReadSensor(coordinator, entry)]
     for unit in ("chlorine", "ph"):
         name_prefix = "Free Chlorine" if unit == "chlorine" else "pH"
         entities.append(PahlenStatusSensor(coordinator, entry, unit, name_prefix))
@@ -42,6 +43,33 @@ async def async_setup_entry(
         entities.append(PahlenLedSensor(coordinator, entry, unit, name_prefix))
 
     async_add_entities(entities)
+
+
+class PahlenLastCalibrationReadSensor(CoordinatorEntity, SensorEntity):
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:calendar-clock"
+    _attr_name = "Pahlen Last Calibration Read"
+
+    def __init__(
+        self, coordinator: PahlenCoordinator, entry: PahlenConfigEntry
+    ) -> None:
+        super().__init__(coordinator)
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry.entry_id}_last_calibration_read"
+
+    @property
+    def native_value(self) -> datetime | None:
+        return parse_backend_timestamp(self._coordinator.data.get("captured_at"))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        captured_at = self._coordinator.data.get("captured_at")
+        return {
+            "captured_at": captured_at,
+            "pushed_at": self._coordinator.data.get("pushed_at"),
+            "stale": self._coordinator.data.get("stale", False),
+            "installation_id": self._coordinator.data.get("installation_id"),
+        }
 
 
 class PahlenStatusSensor(CoordinatorEntity, SensorEntity):
@@ -156,3 +184,18 @@ def format_leds(solid_leds: list[str] | None, blinking_leds: list[str] | None) -
     if blinking_leds:
         parts.append(f"Blinking: {', '.join(blinking_leds)}")
     return "; ".join(parts) if parts else "none"
+
+
+def parse_backend_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    try:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if timestamp.tzinfo is None:
+        return timestamp.replace(tzinfo=timezone.utc)
+
+    return timestamp

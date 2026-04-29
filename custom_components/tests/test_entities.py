@@ -1,6 +1,7 @@
 import importlib
 import sys
 import types
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -17,6 +18,10 @@ class StubCoordinatorEntity:
 
 class StubBinarySensorDeviceClass:
     PROBLEM = "problem"
+
+
+class StubSensorDeviceClass:
+    TIMESTAMP = "timestamp"
 
 
 def stub_homeassistant_modules():
@@ -48,6 +53,7 @@ def stub_homeassistant_modules():
         ),
     }
     modules["homeassistant.components.sensor"].SensorEntity = object
+    modules["homeassistant.components.sensor"].SensorDeviceClass = StubSensorDeviceClass
     modules["homeassistant.components.binary_sensor"].BinarySensorEntity = object
     modules[
         "homeassistant.components.binary_sensor"
@@ -117,6 +123,7 @@ async def test_sensor_setup_creates_pahlen_detail_entities_without_action_sensor
 
     names = [entity._attr_name for entity in entities]
     assert names == [
+        "Pahlen Last Calibration Read",
         "Pahlen Free Chlorine Status",
         "Pahlen Free Chlorine Summary",
         "Pahlen Free Chlorine Diagnosis",
@@ -129,6 +136,32 @@ async def test_sensor_setup_creates_pahlen_detail_entities_without_action_sensor
         "Pahlen pH LEDs",
     ]
     assert all("Dosing Action" not in name for name in names)
+
+
+def test_last_calibration_read_sensor_exposes_backend_capture_timestamp():
+    sensor = load_module("sensor")
+    entry = SimpleNamespace(entry_id="entry-1", runtime_data=SimpleNamespace())
+    coordinator = SimpleNamespace(
+        data=coordinator_data(
+            installation_id="pool",
+            captured_at="2026-04-28T18:16:36Z",
+            pushed_at="2026-04-28T18:17:00Z",
+        )
+    )
+    entry.runtime_data = coordinator
+
+    last_read = sensor.PahlenLastCalibrationReadSensor(coordinator, entry)
+
+    assert last_read._attr_device_class == "timestamp"
+    assert last_read.native_value == datetime(
+        2026, 4, 28, 18, 16, 36, tzinfo=timezone.utc
+    )
+    assert last_read.extra_state_attributes == {
+        "captured_at": "2026-04-28T18:16:36Z",
+        "pushed_at": "2026-04-28T18:17:00Z",
+        "stale": False,
+        "installation_id": "pool",
+    }
 
 
 def test_detail_sensors_expose_backend_analysis_fields():
