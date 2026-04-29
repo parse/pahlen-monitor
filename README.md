@@ -18,9 +18,10 @@ Monitor your Pahlen pool dosing units using a camera and a Python backend. Home 
 
 ## Quality Gates
 The repository's validation workflow runs:
-- `ruff check custom_components backend`
-- `ruff format --check custom_components backend`
+- `ruff check custom_components backend scripts`
+- `ruff format --check custom_components backend scripts`
 - `mypy backend/src custom_components/pahlen_monitor`
+- `python scripts/generate_api_types.py --check`
 - `pytest`
 - HACS validation
 - hassfest validation

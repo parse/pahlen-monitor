@@ -3,3 +3,4 @@ mypy
 pytest
 httpx
 pytest-asyncio
+datamodel-code-generator
