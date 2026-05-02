@@ -6,7 +6,6 @@ from schemas.models import (
     CVAnalysisResult,
     CVBaseUnitResult,
     CVUnitAnalysisPayload,
-    StatusLiteral,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -254,11 +253,6 @@ def build_result(
         else:
             level = derive_level(led_states)
 
-        status: StatusLiteral = (
-            "warning"
-            if device == "chlorine" and blink_set.intersection({1, 2, 6, 7})
-            else "ok"
-        )
         if blink_set.intersection({1, 2}):
             diagnosis = "Low (Standby)"
         elif blink_set.intersection({6, 7}):
@@ -269,7 +263,7 @@ def build_result(
         return {
             "level": level,
             "mode": "standby",
-            "status": status,
+            "status": "warning",
             "diagnosis": diagnosis,
         }
 
@@ -283,11 +277,37 @@ def build_result(
         }
 
     if any(led_states):
+        if (device == "chlorine" and level in {1, 2, 3}) or (
+            device == "ph" and level in {5, 6, 7}
+        ):
+            return {
+                "level": level,
+                "mode": "dosing",
+                "status": "ok",
+                "diagnosis": "Dosing active",
+            }
+
+        if device == "chlorine" and level in {5, 6, 7}:
+            return {
+                "level": level,
+                "mode": "unknown",
+                "status": "warning",
+                "diagnosis": "High chlorine",
+            }
+
+        if device == "ph" and level in {1, 2, 3}:
+            return {
+                "level": level,
+                "mode": "unknown",
+                "status": "warning",
+                "diagnosis": "Low pH",
+            }
+
         return {
             "level": level,
-            "mode": "dosing",
-            "status": "ok",
-            "diagnosis": "Dosing active",
+            "mode": "unknown",
+            "status": "warning",
+            "diagnosis": "Unknown pattern",
         }
 
     return {
@@ -403,10 +423,9 @@ def analyze_with_rois(
 
 
 def candidate_roi_sets(processed_images: list[np.ndarray]) -> list[RoiMap]:
-    candidate_sets = [SHIFTED_ROIS]
     if is_grayscale_privacy_frame(processed_images):
-        candidate_sets.append(PRIVACY_MASK_ROIS)
-    return candidate_sets
+        return [PRIVACY_MASK_ROIS]
+    return [SHIFTED_ROIS]
 
 
 def best_analysis_result(
