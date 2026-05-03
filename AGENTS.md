@@ -15,8 +15,9 @@ connection.
 
 Home Assistant has two roles. Producers capture camera bursts and send them to
 `POST /api/analyze/{installation_id}/burst`. Consumers poll
-`GET /latest/{installation_id}` for the latest stored backend reading. Both use
-the same backend response contract.
+`GET /api/latest/{installation_id}` for the latest stored backend reading. Both
+use the same backend response contract. Older top-level routes still exist as
+compatibility aliases, but new code should prefer `/api/...` routes.
 
 Keep changes simple, strict, and easy to review. Read the nearby code before
 changing it, make sure the goal is clear, and avoid guessing about behavior or

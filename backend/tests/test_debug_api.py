@@ -6,7 +6,7 @@ client = TestClient(app)
 
 def test_debug_endpoint_returns_latest_measurement_contract():
     response = client.get(
-        "/debug/test-installation",
+        "/api/debug/test-installation",
         headers={"Authorization": "Bearer test-token"},
     )
 
@@ -28,9 +28,19 @@ def test_debug_endpoint_returns_latest_measurement_contract():
 
 def test_debug_endpoint_rejects_bad_installation_id():
     response = client.get(
-        "/debug/Bad_Installation",
+        "/api/debug/Bad_Installation",
         headers={"Authorization": "Bearer test-token"},
     )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid installation ID"
+
+
+def test_legacy_debug_endpoint_alias_still_works():
+    response = client.get(
+        "/debug/test-installation",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["installation_id"] == "test-installation"
