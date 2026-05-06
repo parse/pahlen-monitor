@@ -334,7 +334,7 @@ def _options_schema(entry: config_entries.ConfigEntry) -> vol.Schema:
                     default=effective_entry_value(
                         entry, CONF_SHARED_SENSOR_INTERVALS, ""
                     ),
-                ): str,
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             }
         )
     else:

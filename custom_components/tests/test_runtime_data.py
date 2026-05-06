@@ -99,6 +99,12 @@ def stub_modules():
         def __init__(self, config):
             self.config = config
 
+    class StubTextSelectorConfig(StubEntitySelectorConfig):
+        pass
+
+    class StubTextSelector(StubEntitySelector):
+        pass
+
     class StubConfigEntry:
         pass
 
@@ -156,6 +162,10 @@ def stub_modules():
     modules[
         "homeassistant.helpers.selector"
     ].EntitySelectorConfig = StubEntitySelectorConfig
+    modules["homeassistant.helpers.selector"].TextSelector = StubTextSelector
+    modules[
+        "homeassistant.helpers.selector"
+    ].TextSelectorConfig = StubTextSelectorConfig
     modules["homeassistant.helpers.event"].async_track_time_interval = (
         lambda hass, action, interval: lambda: None
     )
