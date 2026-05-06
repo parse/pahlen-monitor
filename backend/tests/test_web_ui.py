@@ -17,6 +17,9 @@ def test_root_serves_web_ui():
     assert "/api/installations/" in response.text
     assert "htmx.org@2.0.10" in response.text
     assert "/sensors/latest" in response.text
+    assert "requestSubmit" not in response.text
+    assert 'params.get("installation_id")' in response.text
+    assert "htmx.ajax" in response.text
 
 
 def test_ui_alias_serves_web_ui():

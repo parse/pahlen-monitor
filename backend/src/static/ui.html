@@ -59,16 +59,24 @@
       const installationInput = document.querySelector("#installation-id");
       const tokenInput = document.querySelector("#web-token");
       const sensorsPanel = document.querySelector("#sensors-panel");
+      const params = new URLSearchParams(window.location.search);
 
-      installationInput.value = localStorage.getItem("syncorswim.installationId") || "";
+      installationInput.value =
+        params.get("installation_id") ||
+        localStorage.getItem("syncorswim.installationId") ||
+        "";
       tokenInput.value = localStorage.getItem("syncorswim.webToken") || "";
 
-      form.addEventListener("submit", (event) => {
+      function storeFormValues() {
         localStorage.setItem(
           "syncorswim.installationId",
           installationInput.value.trim(),
         );
         localStorage.setItem("syncorswim.webToken", tokenInput.value);
+      }
+
+      form.addEventListener("submit", () => {
+        storeFormValues();
       });
 
       document.body.addEventListener("htmx:configRequest", (event) => {
@@ -88,9 +96,26 @@
         sensorsPanel.innerHTML = `<p class="status error">${message}</p><table><tbody><tr><td>${message}</td></tr></tbody></table>`;
       });
 
-      if (installationInput.value && tokenInput.value) {
-        form.requestSubmit();
+      function loadSavedSensors() {
+        if (!installationInput.value || !tokenInput.value) {
+          return;
+        }
+
+        storeFormValues();
+        htmx.ajax(
+          "GET",
+          `/api/installations/sensors/latest-fragment?installation_id=${encodeURIComponent(installationInput.value.trim())}`,
+          {
+            target: "#sensors-panel",
+            swap: "innerHTML",
+            headers: { Authorization: `Bearer ${tokenInput.value}` },
+          },
+        );
       }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        window.setTimeout(loadSavedSensors, 0);
+      });
     </script>
   </body>
 </html>
