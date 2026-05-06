@@ -1,3 +1,4 @@
+from datetime import timezone
 from html import escape
 
 from auth import verify_token, verify_web_ui_token
@@ -63,12 +64,22 @@ def render_sensors_fragment(sensors: list[SharedSensor]) -> str:
     rows = []
     for sensor in sensors:
         value = f"{sensor.value} {sensor.unit}" if sensor.unit else sensor.value
-        updated_at = sensor.updated_at.isoformat() if sensor.updated_at else ""
+        updated_at_value = sensor.updated_at
+        if updated_at_value and (
+            updated_at_value.tzinfo is None or updated_at_value.utcoffset() is None
+        ):
+            updated_at_value = updated_at_value.replace(tzinfo=timezone.utc)
+        updated_at = updated_at_value.isoformat() if updated_at_value else ""
+        updated = (
+            f'<time datetime="{escape(updated_at)}">{escape(updated_at)}</time>'
+            if updated_at
+            else ""
+        )
         rows.append(
             "<tr>"
             f'<td data-label="Sensor">{escape(sensor.label or sensor.key)}</td>'
             f'<td data-label="Value" class="value">{escape(value)}</td>'
-            f'<td data-label="Updated">{escape(updated_at)}</td>'
+            f'<td data-label="Updated">{updated}</td>'
             "</tr>"
         )
 

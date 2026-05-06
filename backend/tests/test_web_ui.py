@@ -20,6 +20,8 @@ def test_root_serves_web_ui():
     assert "requestSubmit" not in response.text
     assert 'params.get("installation_id")' in response.text
     assert "htmx.ajax" in response.text
+    assert "Intl.DateTimeFormat" in response.text
+    assert "time[datetime]" in response.text
 
 
 def test_ui_alias_serves_web_ui():
@@ -102,6 +104,8 @@ def test_latest_sensors_fragment_returns_sensor_table():
     assert "text/html" in response.headers["content-type"]
     assert "Cellar temperature" in response.text
     assert "12.3 C" in response.text
+    assert "<time datetime=" in response.text
+    assert "+00:00" in response.text
 
 
 def test_latest_sensors_fragment_escapes_sensor_values():

@@ -96,6 +96,27 @@
         sensorsPanel.innerHTML = `<p class="status error">${message}</p><table><tbody><tr><td>${message}</td></tr></tbody></table>`;
       });
 
+      function localizeTimestamps() {
+        sensorsPanel.querySelectorAll("time[datetime]").forEach((time) => {
+          const date = new Date(time.dateTime);
+          if (Number.isNaN(date.getTime())) {
+            return;
+          }
+
+          time.textContent = new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(date);
+          time.title = time.dateTime;
+        });
+      }
+
+      document.body.addEventListener("htmx:afterSwap", (event) => {
+        if (event.detail.target === sensorsPanel) {
+          localizeTimestamps();
+        }
+      });
+
       function loadSavedSensors() {
         if (!installationInput.value || !tokenInput.value) {
           return;
