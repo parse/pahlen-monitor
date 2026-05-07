@@ -18,7 +18,7 @@ def test_root_serves_web_ui():
     assert "updateAccessView" in response.text
     assert "removeItem" in response.text
     assert 'href="/static/ui.css"' in response.text
-    assert "/api/installations/" in response.text
+    assert "/ui/sensors/latest-fragment" in response.text
     assert "htmx.org@2.0.10" in response.text
     assert "/sensors/latest" in response.text
     assert "requestSubmit" not in response.text
@@ -100,7 +100,7 @@ def test_latest_sensors_fragment_returns_sensor_table():
     )
 
     response = client.get(
-        "/api/installations/sensors/latest-fragment",
+        "/ui/sensors/latest-fragment",
         params={"installation_id": "test-installation"},
         headers={"Authorization": "Bearer web-test-token"},
     )
@@ -127,7 +127,7 @@ def test_latest_sensors_fragment_escapes_sensor_values():
     )
 
     response = client.get(
-        "/api/installations/sensors/latest-fragment",
+        "/ui/sensors/latest-fragment",
         params={"installation_id": "test-installation"},
         headers={"Authorization": "Bearer web-test-token"},
     )
@@ -145,7 +145,7 @@ def test_latest_sensors_fragment_rejects_missing_wrong_and_push_tokens():
         {"Authorization": "Bearer test-token"},
     ):
         response = client.get(
-            "/api/installations/sensors/latest-fragment",
+            "/ui/sensors/latest-fragment",
             params={"installation_id": "test-installation"},
             headers=headers,
         )
@@ -155,12 +155,12 @@ def test_latest_sensors_fragment_rejects_missing_wrong_and_push_tokens():
 
 def test_latest_sensors_fragment_returns_ui_errors_as_html():
     bad_id_response = client.get(
-        "/api/installations/sensors/latest-fragment",
+        "/ui/sensors/latest-fragment",
         params={"installation_id": "Bad_Installation"},
         headers={"Authorization": "Bearer web-test-token"},
     )
     missing_response = client.get(
-        "/api/installations/sensors/latest-fragment",
+        "/ui/sensors/latest-fragment",
         params={"installation_id": "unknown-installation"},
         headers={"Authorization": "Bearer web-test-token"},
     )

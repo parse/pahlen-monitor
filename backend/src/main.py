@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from routes import analyze, debug, installations, latest
+from routes import analyze, debug, installations, latest, ui
 
 
 @asynccontextmanager
@@ -32,6 +32,8 @@ app.include_router(latest.router, prefix="/latest", tags=["latest"])
 app.include_router(latest.router, prefix="/api/latest", tags=["latest"])
 app.include_router(debug.router, prefix="/debug", tags=["debug"])
 app.include_router(debug.router, prefix="/api/debug", tags=["debug"])
+
+
 app.include_router(
     installations.router, prefix="/installations", tags=["installations"]
 )
@@ -39,6 +41,7 @@ app.include_router(
     installations.router, prefix="/api/installations", tags=["installations"]
 )
 app.include_router(analyze.router, prefix="/api/analyze", tags=["analyze"])
+app.include_router(ui.router, prefix="/ui", tags=["ui"])
 
 STATIC_PATH = Path(__file__).with_name("static")
 UI_PATH = STATIC_PATH / "ui.html"
