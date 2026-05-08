@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.components import camera
 from homeassistant.core import HomeAssistant
@@ -142,17 +142,18 @@ class ProducerCoordinator(DataUpdateCoordinator[SyncOrSwimData]):
         )
 
     def _existing_data_with_error(self, exc: Exception) -> SyncOrSwimData | None:
-        existing_data = getattr(self, "data", None)
+        existing_data = cast(SyncOrSwimData | None, getattr(self, "data", None))
         if not existing_data:
             return None
 
-        return {
+        updated_data: SyncOrSwimData = {
             **existing_data,
             "stale": compute_stale(
                 existing_data.get("captured_at"), self._staleness_minutes
             ),
             "error": str(exc),
         }
+        return updated_data
 
     async def _async_update_data(self) -> SyncOrSwimData:
         try:

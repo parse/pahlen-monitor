@@ -835,6 +835,13 @@ async def test_producer_analysis_no_longer_pushes_shared_sensors(monkeypatch):
 async def test_producer_update_keeps_existing_data_on_analysis_error(monkeypatch):
     coordinator = load_module("coordinator")
     install_fake_api(monkeypatch, coordinator)
+    monkeypatch.setattr(
+        coordinator.camera,
+        "async_get_image",
+        AsyncMock(
+            return_value=SimpleNamespace(content=b"image", content_type="image/jpeg")
+        ),
+    )
     entry = producer_entry()
     producer = coordinator.ProducerCoordinator(make_hass(), entry)
     existing_data = coordinator.unknown_data()
@@ -859,6 +866,13 @@ async def test_producer_update_keeps_existing_data_on_analysis_error(monkeypatch
 async def test_producer_update_raises_when_no_existing_data(monkeypatch):
     coordinator = load_module("coordinator")
     install_fake_api(monkeypatch, coordinator)
+    monkeypatch.setattr(
+        coordinator.camera,
+        "async_get_image",
+        AsyncMock(
+            return_value=SimpleNamespace(content=b"image", content_type="image/jpeg")
+        ),
+    )
     entry = producer_entry()
     producer = coordinator.ProducerCoordinator(make_hass(), entry)
     producer._api_client.analyze_burst = AsyncMock(side_effect=RuntimeError("boom"))
