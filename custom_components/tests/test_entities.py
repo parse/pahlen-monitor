@@ -21,6 +21,7 @@ class StubBinarySensorDeviceClass:
 
 
 class StubSensorDeviceClass:
+    ENUM = "enum"
     TIMESTAMP = "timestamp"
 
 
@@ -272,6 +273,8 @@ def test_problem_sensor_state_matrix(data, expected):
     problem = sensor.SyncOrSwimProblemSensor(coordinator, entry)
 
     assert problem._attr_name == "SyncOrSwim Dosing Problem"
+    assert problem._attr_device_class == "enum"
+    assert problem._attr_options == ["OK", "Warning", "Error"]
     assert problem.native_value == expected
 
 

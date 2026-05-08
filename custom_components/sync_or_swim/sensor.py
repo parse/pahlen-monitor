@@ -133,8 +133,14 @@ class SyncOrSwimSharedSensor(CoordinatorEntity, SensorEntity):
 
 
 class SyncOrSwimProblemSensor(CoordinatorEntity, SensorEntity):
+    _attr_device_class = SensorDeviceClass.ENUM
     _attr_icon = "mdi:alert-circle-outline"
     _attr_name = "SyncOrSwim Dosing Problem"
+    _attr_options = [
+        DOSING_PROBLEM_OK,
+        DOSING_PROBLEM_WARNING,
+        DOSING_PROBLEM_ERROR,
+    ]
 
     def __init__(
         self, coordinator: SyncOrSwimCoordinator, entry: SyncOrSwimConfigEntry
