@@ -22,6 +22,32 @@ def test_isolated_on_frame_is_not_blinking_or_solid():
     assert blink_leds == []
 
 
+def test_tied_solid_led_counts_use_detection_strength():
+    frames = [
+        [False, False, False],
+        [False, False, False],
+        [False, False, False],
+        [False, False, False],
+        [False, False, False],
+        [True, True, True],
+        [True, True, True],
+    ]
+    strengths = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.35, 0.37, 0.33],
+        [0.57, 0.59, 0.57],
+    ]
+
+    led_states, blink_leds = summarize_led_frames(frames, strengths)
+
+    assert led_states == [False, False, False, False, False, False, True]
+    assert blink_leds == []
+
+
 @pytest.mark.parametrize("pattern", ["11100011", "11000111", "10101010", "00111100"])
 def test_repeated_on_off_patterns_are_blinking(pattern):
     led_states, blink_leds = summarize_led_frames(frames_for_first_led(pattern))
