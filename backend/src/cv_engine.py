@@ -120,24 +120,28 @@ def color_mask_ratio(
     )
 
 
-def is_led_lit(roi_hsv: np.ndarray, color_type: str) -> bool:
+def led_detection_strength(roi_hsv: np.ndarray, color_type: str) -> float:
     import cv2
 
     area = roi_hsv.shape[0] * roi_hsv.shape[1]
-    color_is_lit = any(
-        mask_ratio(cv2.inRange(roi_hsv, np.array(lower), np.array(upper)), area)
-        > LED_COLOR_MASK_RATIO_THRESHOLD
-        for lower, upper in COLOR_MASKS[color_type]
+    color_strength = max(
+        (
+            mask_ratio(cv2.inRange(roi_hsv, np.array(lower), np.array(upper)), area)
+            for lower, upper in COLOR_MASKS[color_type]
+        ),
+        default=0.0,
     )
-    if color_is_lit:
-        return True
 
     bright_mask = cv2.inRange(
         roi_hsv,
         np.array(BRIGHT_LED_MASK_LOWER),
         np.array(BRIGHT_LED_MASK_UPPER),
     )
-    return mask_ratio(bright_mask, area) > LED_COLOR_MASK_RATIO_THRESHOLD
+    return max(color_strength, mask_ratio(bright_mask, area))
+
+
+def is_led_lit(roi_hsv: np.ndarray, color_type: str) -> bool:
+    return led_detection_strength(roi_hsv, color_type) > LED_COLOR_MASK_RATIO_THRESHOLD
 
 
 def empty_unit_payload() -> CVUnitAnalysisPayload:
@@ -192,17 +196,45 @@ def detect_led_on_frames(
     return led_on_frames
 
 
+def detect_led_detection_strengths(
+    processed_images: list[np.ndarray], rois: RoiMap
+) -> dict[DeviceName, list[list[float]]]:
+    import cv2
+
+    led_strengths: dict[DeviceName, list[list[float]]] = {
+        "chlorine": [[] for _ in range(LED_COUNT)],
+        "ph": [[] for _ in range(LED_COUNT)],
+    }
+
+    for img in processed_images:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+        for device in DEVICE_NAMES:
+            for i, roi in enumerate(rois[device]):
+                x, y, w, h = roi
+                roi_hsv = hsv[y : y + h, x : x + w]
+                led_strengths[device][i].append(
+                    led_detection_strength(roi_hsv, get_led_color(i))
+                )
+
+    return led_strengths
+
+
 def summarize_led_frames(
     frames_by_led: list[list[bool]],
+    strengths_by_led: list[list[float]] | None = None,
 ) -> tuple[list[bool], list[int]]:
     total_frames = len(frames_by_led[0])
     led_on_counts = np.zeros(LED_COUNT)
+    led_strengths = np.zeros(LED_COUNT)
     blink_leds = []
 
     for i, led_frames in enumerate(frames_by_led):
         frames = np.array(led_frames)
         on_count = np.sum(frames)
         led_on_counts[i] = on_count
+        if strengths_by_led is not None:
+            led_strengths[i] = float(np.mean(strengths_by_led[i]))
         off_count = total_frames - on_count
 
         transitions = np.sum(np.diff(frames.astype(int)) != 0)
@@ -215,7 +247,10 @@ def summarize_led_frames(
 
     led_states = [False] * LED_COUNT
     if any(led_on_counts > 0):
-        best_led_idx = int(np.argmax(led_on_counts))
+        if strengths_by_led is None:
+            best_led_idx = int(np.argmax(led_on_counts))
+        else:
+            best_led_idx = int(np.lexsort((led_strengths, led_on_counts))[-1])
         if (
             led_on_counts[best_led_idx] / total_frames
             >= SOLID_LED_FRAME_RATIO_THRESHOLD
@@ -386,13 +421,16 @@ def analyze_with_rois(
     processed_images: list[np.ndarray], rois: RoiMap
 ) -> CVAnalysisResult:
     led_on_frames = detect_led_on_frames(processed_images, rois)
+    led_strengths = detect_led_detection_strengths(processed_images, rois)
     final_results: CVAnalysisResult = {
         "chlorine": empty_unit_payload(),
         "ph": empty_unit_payload(),
     }
 
     for device in DEVICE_NAMES:
-        led_states, blink_leds = summarize_led_frames(led_on_frames[device])
+        led_states, blink_leds = summarize_led_frames(
+            led_on_frames[device], led_strengths[device]
+        )
         result = build_result(device, led_states, blink_leds)
 
         final_results[device] = {
