@@ -124,11 +124,11 @@
           "syncorswim.installationId",
           installationInput.value.trim(),
         );
-        localStorage.setItem("syncorswim.webToken", tokenInput.value);
+        localStorage.setItem("syncorswim.webToken", tokenInput.value.trim());
       }
 
       function hasSavedAccess() {
-        return Boolean(installationInput.value.trim() && tokenInput.value);
+        return Boolean(installationInput.value.trim() && tokenInput.value.trim());
       }
 
       function updateAccessView() {
@@ -163,7 +163,7 @@
       });
 
       document.body.addEventListener("htmx:configRequest", (event) => {
-        event.detail.headers.Authorization = `Bearer ${tokenInput.value}`;
+        event.detail.headers.Authorization = `Bearer ${tokenInput.value.trim()}`;
       });
 
       document.body.addEventListener("htmx:beforeRequest", (event) => {
@@ -238,7 +238,7 @@
       });
 
       function loadPoolStatus() {
-        if (!installationInput.value || !tokenInput.value) {
+        if (!installationInput.value.trim() || !tokenInput.value.trim()) {
           return;
         }
 
@@ -248,13 +248,13 @@
           {
             target: "#pool-status-panel",
             swap: "innerHTML",
-            headers: { Authorization: `Bearer ${tokenInput.value}` },
+            headers: { Authorization: `Bearer ${tokenInput.value.trim()}` },
           },
         );
       }
 
       function loadSavedData() {
-        if (!installationInput.value || !tokenInput.value) {
+        if (!installationInput.value.trim() || !tokenInput.value.trim()) {
           return;
         }
 
@@ -267,7 +267,7 @@
           {
             target: "#sensors-panel",
             swap: "innerHTML",
-            headers: { Authorization: `Bearer ${tokenInput.value}` },
+            headers: { Authorization: `Bearer ${tokenInput.value.trim()}` },
           },
         );
       }

@@ -159,6 +159,35 @@ async def test_get_latest_sends_staleness_threshold():
 
 
 @pytest.mark.asyncio
+async def test_get_latest_defaults_missing_dosing_problem_stale_to_false():
+    api_client = load_api_client()
+    payload = sample_measurement()
+    payload["dosing_problem"].pop("stale")
+    FakeSession.responses = [FakeResponse(payload=payload)]
+    client = api_client.SyncOrSwimApiClient(
+        "https://backend.example/", "secret", FakeSession()
+    )
+
+    data = await client.get_latest("pool-1")
+
+    assert data["dosing_problem"]["stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_latest_rejects_invalid_dosing_problem_stale_type():
+    api_client = load_api_client()
+    payload = sample_measurement()
+    payload["dosing_problem"]["stale"] = "false"
+    FakeSession.responses = [FakeResponse(payload=payload)]
+    client = api_client.SyncOrSwimApiClient(
+        "https://backend.example/", "secret", FakeSession()
+    )
+
+    with pytest.raises(ValueError, match="dosing_problem.stale"):
+        await client.get_latest("pool-1")
+
+
+@pytest.mark.asyncio
 async def test_get_latest_raises_not_found_for_404():
     api_client = load_api_client()
     FakeSession.responses = [FakeResponse(status=404)]

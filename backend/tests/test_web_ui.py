@@ -59,7 +59,10 @@ def test_root_serves_web_ui():
     assert "persistIncomingAccessFromUrl" in response.text
     assert "removeItem" in response.text
     assert 'params.get("web_token")' in response.text
-    assert 'localStorage.setItem("syncorswim.webToken"' in response.text
+    assert (
+        'localStorage.setItem("syncorswim.webToken", tokenInput.value.trim())'
+        in response.text
+    )
     assert 'cleanUrl.searchParams.delete("web_token")' in response.text
     assert "history.replaceState" in response.text
     assert 'href="/static/ui.css"' in response.text
@@ -75,6 +78,7 @@ def test_root_serves_web_ui():
     assert "htmx.ajax" in response.text
     assert "Intl.DateTimeFormat" in response.text
     assert "time[datetime]" in response.text
+    assert "tokenInput.value.trim()" in response.text
 
 
 def test_ui_alias_serves_web_ui():

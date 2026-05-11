@@ -22,6 +22,11 @@ async def get_latest_measurement(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    if staleness_threshold_minutes is not None and staleness_threshold_minutes < 0:
+        raise HTTPException(
+            status_code=400, detail="staleness_threshold_minutes must be non-negative"
+        )
+
     latest = (
         db.query(Measurement)
         .filter(Measurement.installation_id == installation_id)

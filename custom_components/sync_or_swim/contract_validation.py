@@ -130,7 +130,8 @@ def validate_dosing_problem(data: Any, field_name: str) -> DosingProblem:
         raise ValueError(
             f"Expected '{field_name}.state' to be one of {VALID_DOSING_PROBLEM_STATES} or null"
         )
-    _require_type(data.get("stale"), bool, f"{field_name}.stale")
+    stale = data.get("stale", False)
+    _require_type(stale, bool, f"{field_name}.stale")
     chlorine_status = data.get("chlorine_status")
     ph_status = data.get("ph_status")
     if chlorine_status is not None and chlorine_status not in VALID_STATUSES:
@@ -144,7 +145,7 @@ def validate_dosing_problem(data: Any, field_name: str) -> DosingProblem:
 
     return {
         "state": cast(DosingProblemState | None, state),
-        "stale": cast(bool, data["stale"]),
+        "stale": cast(bool, stale),
         "chlorine_status": cast(Status | None, chlorine_status),
         "ph_status": cast(Status | None, ph_status),
     }
