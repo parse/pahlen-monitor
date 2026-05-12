@@ -191,10 +191,11 @@ async def test_get_latest_defaults_missing_dosing_problem_reason_to_none():
 
 
 @pytest.mark.asyncio
-async def test_get_latest_rejects_invalid_dosing_problem_reason():
+@pytest.mark.parametrize("reason", ["bad_reason", [], {}])
+async def test_get_latest_rejects_invalid_dosing_problem_reason(reason):
     api_client = load_api_client()
     payload = sample_measurement()
-    payload["dosing_problem"]["reason"] = "bad_reason"
+    payload["dosing_problem"]["reason"] = reason
     FakeSession.responses = [FakeResponse(payload=payload)]
     client = api_client.SyncOrSwimApiClient(
         "https://backend.example/", "secret", FakeSession()

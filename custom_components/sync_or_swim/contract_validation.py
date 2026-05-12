@@ -151,6 +151,7 @@ def validate_dosing_problem(data: Any, field_name: str) -> DosingProblem:
             f"Expected '{field_name}.state' to be one of {VALID_DOSING_PROBLEM_STATES} or null"
         )
     reason = data.get("reason")
+    _require_nullable_string(reason, f"{field_name}.reason")
     if reason is not None and reason not in VALID_DOSING_PROBLEM_REASONS:
         raise ValueError(
             f"Expected '{field_name}.reason' to be one of {VALID_DOSING_PROBLEM_REASONS} or null"
