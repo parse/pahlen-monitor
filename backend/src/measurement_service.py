@@ -6,6 +6,7 @@ from schemas.models import (
     CVAnalysisResult,
     CVUnitAnalysisPayload,
     DosingProblemLiteral,
+    DosingProblemReasonLiteral,
     DosingProblemSchema,
     LatestMeasurementSchema,
     PoolAnalysisSchema,
@@ -54,6 +55,74 @@ def dosing_problem_from_statuses(
     return None
 
 
+def dosing_problem_reason_from_statuses(
+    chlorine_status: StatusLiteral | None,
+    ph_status: StatusLiteral | None,
+    stale: bool,
+) -> DosingProblemReasonLiteral:
+    chlorine_problem = chlorine_status in {"warning", "error"}
+    ph_problem = ph_status in {"warning", "error"}
+    has_error = chlorine_status == "error" or ph_status == "error"
+
+    if chlorine_problem and ph_problem and has_error:
+        return "multiple_units"
+    if chlorine_status == "error":
+        return "chlorine_error"
+    if ph_status == "error":
+        return "ph_error"
+    if stale:
+        return "stale_data"
+    if chlorine_problem and ph_problem:
+        return "multiple_units"
+    if chlorine_status == "warning":
+        return "chlorine_warning"
+    if ph_status == "warning":
+        return "ph_warning"
+    if (chlorine_status, ph_status) == ("ok", "ok"):
+        return "none"
+    return "unknown"
+
+
+def dosing_problem_message(reason: DosingProblemReasonLiteral) -> str:
+    messages: dict[DosingProblemReasonLiteral, str] = {
+        "stale_data": "Latest reading is stale",
+        "chlorine_error": "Chlorine dosing unit reports an error",
+        "ph_error": "pH dosing unit reports an error",
+        "chlorine_warning": "Chlorine status is warning",
+        "ph_warning": "pH status is warning",
+        "multiple_units": "Multiple dosing units report warnings or errors",
+        "unknown": "Dosing problem state is unknown",
+        "none": "No dosing problem detected",
+    }
+    return messages[reason]
+
+
+def action_required_from_cv(data: CVUnitAnalysisPayload) -> bool:
+    if data["status"] == "error":
+        return True
+    if data["status"] != "warning":
+        return False
+    return data["diagnosis"] not in {"Below target", "Above target"}
+
+
+def recommended_action_from_cv(data: CVUnitAnalysisPayload) -> str:
+    status = data["status"]
+    if status not in {"warning", "error"}:
+        return ""
+
+    mode = data["mode"]
+    diagnosis = data["diagnosis"]
+    if mode == "error" or status == "error":
+        return "Dosing stopped after timeout. Check the dosing unit and circulation."
+    if mode == "standby":
+        return "Unit is in standby. Check that circulation is running."
+    if diagnosis == "Below target":
+        return "Value is below target. Unit may be dosing or waiting for the value to rise."
+    if diagnosis == "Above target":
+        return "Value is above target. Unit may be dosing or waiting for the value to drop."
+    return "Check dosing unit LED pattern."
+
+
 def unit_from_cv(data: CVUnitAnalysisPayload) -> UnitAnalysis:
     status = data["status"]
     diagnosis = data["diagnosis"]
@@ -77,10 +146,8 @@ def unit_from_cv(data: CVUnitAnalysisPayload) -> UnitAnalysis:
         blinking_leds=led_labels(blinking),
         solid_leds=led_labels(solid_leds),
         summary=summary,
-        action_required=status in {"warning", "error"},
-        recommended_action=(
-            "Check dosing unit" if status in {"warning", "error"} else ""
-        ),
+        action_required=action_required_from_cv(data),
+        recommended_action=recommended_action_from_cv(data),
     )
 
 
@@ -117,6 +184,9 @@ def latest_schema_from_measurement(
     )
     chlorine_status = status_from_db(measurement.chlorine_status)
     ph_status = status_from_db(measurement.ph_status)
+    dosing_problem_reason = dosing_problem_reason_from_statuses(
+        chlorine_status, ph_status, stale
+    )
 
     return LatestMeasurementSchema(
         installation_id=measurement.installation_id,
@@ -146,6 +216,8 @@ def latest_schema_from_measurement(
         ),
         dosing_problem=DosingProblemSchema(
             state=dosing_problem_from_statuses(chlorine_status, ph_status, stale),
+            reason=dosing_problem_reason,
+            message=dosing_problem_message(dosing_problem_reason),
             stale=stale,
             chlorine_status=chlorine_status,
             ph_status=ph_status,

@@ -11,15 +11,18 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .entry_types import SyncOrSwimConfigEntry, require_runtime_coordinator
+from .problem_attributes import (
+    DOSING_PROBLEM_ERROR,
+    DOSING_PROBLEM_OK,
+    DOSING_PROBLEM_WARNING,
+    dosing_problem_attributes,
+)
 
 if TYPE_CHECKING:
     from .coordinator import SyncOrSwimCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 UnitName = Literal["chlorine", "ph"]
-DOSING_PROBLEM_OK = "OK"
-DOSING_PROBLEM_WARNING = "Warning"
-DOSING_PROBLEM_ERROR = "Error"
 INVALID_SHARED_SENSOR_VALUES = {"unknown", "unavailable"}
 GENERIC_SHARED_SENSOR_LABELS = {
     "battery",
@@ -169,22 +172,7 @@ class SyncOrSwimProblemSensor(CoordinatorEntity, SensorEntity):
         if not data:
             return {}
 
-        pool = data.get("pool")
-        attributes = {
-            "stale": data.get("stale", False),
-            "stale_since": data.get("captured_at") if data.get("stale") else None,
-            "error": data.get("error"),
-        }
-
-        if pool:
-            attributes.update(
-                {
-                    "chlorine_status": pool["chlorine"]["status"],
-                    "ph_status": pool["ph"]["status"],
-                }
-            )
-
-        return attributes
+        return dosing_problem_attributes(data)
 
 
 class SyncOrSwimLastCalibrationReadSensor(CoordinatorEntity, SensorEntity):

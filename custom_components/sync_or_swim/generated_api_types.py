@@ -12,7 +12,21 @@ class BodyAnalyzeAndStoreImageBurstApiAnalyzeInstallationIdBurstPost(TypedDict):
 
 class DosingProblemSchema(TypedDict):
     chlorine_status: NotRequired[Literal["ok", "warning", "error", "unknown"] | None]
+    message: NotRequired[str | None]
     ph_status: NotRequired[Literal["ok", "warning", "error", "unknown"] | None]
+    reason: NotRequired[
+        Literal[
+            "stale_data",
+            "chlorine_error",
+            "ph_error",
+            "chlorine_warning",
+            "ph_warning",
+            "multiple_units",
+            "unknown",
+            "none",
+        ]
+        | None
+    ]
     stale: NotRequired[bool]
     state: NotRequired[Literal["OK", "Warning", "Error"] | None]
 

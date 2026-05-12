@@ -21,6 +21,16 @@ from .generated_api_types import (
 
 Status = Literal["ok", "warning", "error", "unknown"]
 DosingProblemState = Literal["OK", "Warning", "Error"]
+DosingProblemReason = Literal[
+    "stale_data",
+    "chlorine_error",
+    "ph_error",
+    "chlorine_warning",
+    "ph_warning",
+    "multiple_units",
+    "unknown",
+    "none",
+]
 DosingProblem: TypeAlias = _DosingProblemSchema
 InstallationResponse: TypeAlias = _InstallationResponseSchema
 LatestMeasurement: TypeAlias = _LatestMeasurementSchema
@@ -29,6 +39,16 @@ SharedSensor: TypeAlias = _SharedSensorSchema
 UnitAnalysis: TypeAlias = _UnitAnalysis
 VALID_STATUSES = {"ok", "warning", "error", "unknown"}
 VALID_DOSING_PROBLEM_STATES = {"OK", "Warning", "Error"}
+VALID_DOSING_PROBLEM_REASONS = {
+    "stale_data",
+    "chlorine_error",
+    "ph_error",
+    "chlorine_warning",
+    "ph_warning",
+    "multiple_units",
+    "unknown",
+    "none",
+}
 
 
 class SyncOrSwimData(_LatestMeasurementSchema):
@@ -130,6 +150,13 @@ def validate_dosing_problem(data: Any, field_name: str) -> DosingProblem:
         raise ValueError(
             f"Expected '{field_name}.state' to be one of {VALID_DOSING_PROBLEM_STATES} or null"
         )
+    reason = data.get("reason")
+    _require_nullable_string(reason, f"{field_name}.reason")
+    if reason is not None and reason not in VALID_DOSING_PROBLEM_REASONS:
+        raise ValueError(
+            f"Expected '{field_name}.reason' to be one of {VALID_DOSING_PROBLEM_REASONS} or null"
+        )
+    _require_nullable_string(data.get("message"), f"{field_name}.message")
     stale = data.get("stale", False)
     _require_type(stale, bool, f"{field_name}.stale")
     chlorine_status = data.get("chlorine_status")
@@ -145,6 +172,8 @@ def validate_dosing_problem(data: Any, field_name: str) -> DosingProblem:
 
     return {
         "state": cast(DosingProblemState | None, state),
+        "reason": cast(DosingProblemReason | None, reason),
+        "message": cast(str | None, data.get("message")),
         "stale": cast(bool, stale),
         "chlorine_status": cast(Status | None, chlorine_status),
         "ph_status": cast(Status | None, ph_status),

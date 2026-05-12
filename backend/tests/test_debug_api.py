@@ -24,6 +24,8 @@ def test_debug_endpoint_returns_latest_measurement_contract():
     assert data["installation_id"] == "test-installation"
     assert data["raw_response"] is None
     assert data["dosing_problem"]["state"] == "Warning"
+    assert data["dosing_problem"]["reason"] == "ph_warning"
+    assert data["dosing_problem"]["message"] == "pH status is warning"
     assert data["pool"]["chlorine"]["status"] == "ok"
     assert data["pool"]["ph"]["status"] == "warning"
 

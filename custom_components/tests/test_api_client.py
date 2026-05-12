@@ -17,6 +17,8 @@ def sample_measurement():
         "raw_response": None,
         "dosing_problem": {
             "state": "Warning",
+            "reason": "ph_warning",
+            "message": "pH status is warning",
             "stale": False,
             "chlorine_status": "ok",
             "ph_status": "warning",
@@ -121,6 +123,8 @@ async def test_get_latest_uses_auth_headers_and_validates_response():
     data = await client.get_latest("pool-1")
 
     assert data["installation_id"] == "pool-1"
+    assert data["dosing_problem"]["reason"] == "ph_warning"
+    assert data["dosing_problem"]["message"] == "pH status is warning"
     assert data["pool"]["chlorine"]["blinking_leds"] == []
     assert FakeSession.calls == [
         (
@@ -171,6 +175,65 @@ async def test_get_latest_defaults_missing_dosing_problem_stale_to_false():
     data = await client.get_latest("pool-1")
 
     assert data["dosing_problem"]["stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_latest_defaults_missing_dosing_problem_reason_to_none():
+    api_client = load_api_client()
+    payload = sample_measurement()
+    payload["dosing_problem"].pop("reason")
+    FakeSession.responses = [FakeResponse(payload=payload)]
+    client = api_client.SyncOrSwimApiClient(
+        "https://backend.example/", "secret", FakeSession()
+    )
+
+    data = await client.get_latest("pool-1")
+
+    assert data["dosing_problem"]["reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_latest_defaults_missing_dosing_problem_message_to_none():
+    api_client = load_api_client()
+    payload = sample_measurement()
+    payload["dosing_problem"].pop("message")
+    FakeSession.responses = [FakeResponse(payload=payload)]
+    client = api_client.SyncOrSwimApiClient(
+        "https://backend.example/", "secret", FakeSession()
+    )
+
+    data = await client.get_latest("pool-1")
+
+    assert data["dosing_problem"]["message"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["bad_reason", [], {}])
+async def test_get_latest_rejects_invalid_dosing_problem_reason(reason):
+    api_client = load_api_client()
+    payload = sample_measurement()
+    payload["dosing_problem"]["reason"] = reason
+    FakeSession.responses = [FakeResponse(payload=payload)]
+    client = api_client.SyncOrSwimApiClient(
+        "https://backend.example/", "secret", FakeSession()
+    )
+
+    with pytest.raises(ValueError, match="dosing_problem.reason"):
+        await client.get_latest("pool-1")
+
+
+@pytest.mark.asyncio
+async def test_get_latest_rejects_invalid_dosing_problem_message_type():
+    api_client = load_api_client()
+    payload = sample_measurement()
+    payload["dosing_problem"]["message"] = []
+    FakeSession.responses = [FakeResponse(payload=payload)]
+    client = api_client.SyncOrSwimApiClient(
+        "https://backend.example/", "secret", FakeSession()
+    )
+
+    with pytest.raises(ValueError, match="dosing_problem.message"):
+        await client.get_latest("pool-1")
 
 
 @pytest.mark.asyncio
