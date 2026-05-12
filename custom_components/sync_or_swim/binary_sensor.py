@@ -29,10 +29,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = require_runtime_coordinator(entry)
-    async_add_entities([SyncOrSwimProblemSensor(coordinator, entry)])
+    async_add_entities([SyncOrSwimDosingProblemBinarySensor(coordinator, entry)])
 
 
-class SyncOrSwimProblemSensor(CoordinatorEntity, BinarySensorEntity):
+class SyncOrSwimDosingProblemBinarySensor(CoordinatorEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_name = "SyncOrSwim Dosing Problem Active"
 
@@ -84,18 +84,23 @@ class SyncOrSwimProblemSensor(CoordinatorEntity, BinarySensorEntity):
 
         pool = data.get("pool")
         dosing_problem = data.get("dosing_problem")
+        problem_reason = dosing_problem.get("reason") if dosing_problem else None
         attributes = {
             "stale": data.get("stale", False),
             "stale_since": data.get("captured_at") if data.get("stale") else None,
             "error": data.get("error"),
-            "problem_reason": dosing_problem.get("reason") if dosing_problem else None,
+            "problem_reason": problem_reason
+            or ("stale_data" if data.get("stale", False) else None),
         }
 
         if dosing_problem:
+            chlorine_status = dosing_problem.get("chlorine_status")
+            ph_status = dosing_problem.get("ph_status")
             attributes.update(
                 {
-                    "chlorine_status": dosing_problem.get("chlorine_status"),
-                    "ph_status": dosing_problem.get("ph_status"),
+                    "chlorine_status": chlorine_status
+                    or (pool["chlorine"]["status"] if pool else None),
+                    "ph_status": ph_status or (pool["ph"]["status"] if pool else None),
                 }
             )
         elif pool:

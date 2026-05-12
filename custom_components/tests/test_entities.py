@@ -302,7 +302,7 @@ def test_binary_problem_sensor_prefers_backend_dosing_problem_state(state, expec
     )
     entry.runtime_data = coordinator
 
-    problem = binary_sensor.SyncOrSwimProblemSensor(coordinator, entry)
+    problem = binary_sensor.SyncOrSwimDosingProblemBinarySensor(coordinator, entry)
 
     assert problem._attr_name == "SyncOrSwim Dosing Problem Active"
     assert problem._attr_unique_id == "entry-1_problem_binary"
@@ -310,6 +310,37 @@ def test_binary_problem_sensor_prefers_backend_dosing_problem_state(state, expec
     assert problem.extra_state_attributes["problem_reason"] == (
         "none" if state == "OK" else "multiple_units"
     )
+
+
+def test_problem_sensors_fall_back_for_older_backend_dosing_problem_payloads():
+    sensor = load_module("sensor")
+    binary_sensor = load_module("binary_sensor")
+    entry = SimpleNamespace(entry_id="entry-1", runtime_data=SimpleNamespace())
+    coordinator = SimpleNamespace(
+        data=coordinator_data(
+            stale=True,
+            pool={
+                "chlorine": {"status": "warning"},
+                "ph": {"status": "ok"},
+            },
+            dosing_problem={
+                "state": "OK",
+                "stale": False,
+            },
+        )
+    )
+    entry.runtime_data = coordinator
+
+    enum_problem = sensor.SyncOrSwimProblemSensor(coordinator, entry)
+    binary_problem = binary_sensor.SyncOrSwimDosingProblemBinarySensor(
+        coordinator, entry
+    )
+
+    for problem in (enum_problem, binary_problem):
+        attributes = problem.extra_state_attributes
+        assert attributes["problem_reason"] == "stale_data"
+        assert attributes["chlorine_status"] == "warning"
+        assert attributes["ph_status"] == "ok"
 
 
 def test_problem_sensor_does_not_derive_state_without_backend_dosing_problem():
