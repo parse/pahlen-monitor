@@ -62,19 +62,22 @@ def dosing_problem_reason_from_statuses(
 ) -> DosingProblemReasonLiteral:
     chlorine_problem = chlorine_status in {"warning", "error"}
     ph_problem = ph_status in {"warning", "error"}
+    has_error = chlorine_status == "error" or ph_status == "error"
 
-    if chlorine_problem and ph_problem:
+    if chlorine_problem and ph_problem and has_error:
         return "multiple_units"
     if chlorine_status == "error":
         return "chlorine_error"
     if ph_status == "error":
         return "ph_error"
+    if stale:
+        return "stale_data"
+    if chlorine_problem and ph_problem:
+        return "multiple_units"
     if chlorine_status == "warning":
         return "chlorine_warning"
     if ph_status == "warning":
         return "ph_warning"
-    if stale:
-        return "stale_data"
     if (chlorine_status, ph_status) == ("ok", "ok"):
         return "none"
     return "unknown"

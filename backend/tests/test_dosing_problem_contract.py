@@ -109,6 +109,38 @@ def test_latest_schema_marks_stale_measurement_as_warning():
     assert latest.dosing_problem.stale is True
 
 
+def test_latest_schema_prioritizes_stale_reason_over_warning_status():
+    latest = latest_schema_from_measurement(
+        measurement(
+            chlorine_status="warning",
+            captured_at=datetime.now(timezone.utc) - timedelta(minutes=121),
+        ),
+        staleness_threshold_minutes=120,
+    )
+
+    assert latest.dosing_problem is not None
+    assert latest.dosing_problem.state == "Warning"
+    assert latest.dosing_problem.reason == "stale_data"
+    assert latest.dosing_problem.message == "Latest reading is stale"
+    assert latest.dosing_problem.stale is True
+
+
+def test_latest_schema_prioritizes_error_reason_over_stale():
+    latest = latest_schema_from_measurement(
+        measurement(
+            chlorine_status="error",
+            captured_at=datetime.now(timezone.utc) - timedelta(minutes=121),
+        ),
+        staleness_threshold_minutes=120,
+    )
+
+    assert latest.dosing_problem is not None
+    assert latest.dosing_problem.state == "Error"
+    assert latest.dosing_problem.reason == "chlorine_error"
+    assert latest.dosing_problem.message == "Chlorine dosing unit reports an error"
+    assert latest.dosing_problem.stale is True
+
+
 @pytest.mark.parametrize(
     ("payload", "expected_action_required", "expected_recommended_action"),
     [
