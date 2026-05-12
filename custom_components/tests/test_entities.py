@@ -268,8 +268,10 @@ def test_problem_sensor_marks_cached_backend_state_stale(state, expected):
             stale=True,
             dosing_problem={
                 "state": state,
-                "reason": "stale_data",
-                "message": "Latest reading is stale",
+                "reason": "chlorine_error" if state == "Error" else "none",
+                "message": "Chlorine dosing unit reports an error"
+                if state == "Error"
+                else "No dosing problem detected",
                 "stale": False,
                 "chlorine_status": "ok",
                 "ph_status": "ok",
@@ -281,9 +283,13 @@ def test_problem_sensor_marks_cached_backend_state_stale(state, expected):
     problem = sensor.SyncOrSwimProblemSensor(coordinator, entry)
 
     assert problem.native_value == expected
-    assert problem.extra_state_attributes["problem_reason"] == "stale_data"
-    assert (
-        problem.extra_state_attributes["problem_message"] == "Latest reading is stale"
+    assert problem.extra_state_attributes["problem_reason"] == (
+        "chlorine_error" if state == "Error" else "stale_data"
+    )
+    assert problem.extra_state_attributes["problem_message"] == (
+        "Chlorine dosing unit reports an error"
+        if state == "Error"
+        else "Latest reading is stale"
     )
 
 
@@ -328,6 +334,46 @@ def test_binary_problem_sensor_prefers_backend_dosing_problem_state(state, expec
         if state == "OK"
         else "Multiple dosing units report warnings or errors"
     )
+
+
+@pytest.mark.parametrize(
+    ("state", "expected_reason", "expected_message"),
+    [
+        ("OK", "stale_data", "Latest reading is stale"),
+        (
+            "Error",
+            "chlorine_error",
+            "Chlorine dosing unit reports an error",
+        ),
+    ],
+)
+def test_binary_problem_sensor_stale_attributes_follow_effective_state(
+    state, expected_reason, expected_message
+):
+    binary_sensor = load_module("binary_sensor")
+    entry = SimpleNamespace(entry_id="entry-1", runtime_data=SimpleNamespace())
+    coordinator = SimpleNamespace(
+        data=coordinator_data(
+            stale=True,
+            dosing_problem={
+                "state": state,
+                "reason": "chlorine_error" if state == "Error" else "none",
+                "message": "Chlorine dosing unit reports an error"
+                if state == "Error"
+                else "No dosing problem detected",
+                "stale": False,
+                "chlorine_status": "ok",
+                "ph_status": "ok",
+            },
+        )
+    )
+    entry.runtime_data = coordinator
+
+    problem = binary_sensor.SyncOrSwimDosingProblemBinarySensor(coordinator, entry)
+
+    assert problem.is_on is True
+    assert problem.extra_state_attributes["problem_reason"] == expected_reason
+    assert problem.extra_state_attributes["problem_message"] == expected_message
 
 
 def test_problem_sensors_fall_back_for_older_backend_dosing_problem_payloads():
