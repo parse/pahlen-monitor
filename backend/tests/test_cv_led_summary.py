@@ -80,7 +80,7 @@ def test_chlorine_high_stable_leds_are_warning(level):
 
     assert result == {
         "level": level,
-        "mode": "unknown",
+        "mode": "waiting",
         "status": "warning",
         "diagnosis": "Above target",
     }
@@ -92,7 +92,7 @@ def test_ph_low_stable_leds_are_warning(level):
 
     assert result == {
         "level": level,
-        "mode": "unknown",
+        "mode": "waiting",
         "status": "warning",
         "diagnosis": "Below target",
     }

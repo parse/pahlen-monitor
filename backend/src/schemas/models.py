@@ -16,7 +16,9 @@ DosingProblemReasonLiteral = Literal[
     "unknown",
     "none",
 ]
-ModeLiteral = Literal["auto", "standby", "dosing", "error", "unknown", "disabled"]
+ModeLiteral = Literal[
+    "auto", "standby", "dosing", "waiting", "error", "unknown", "disabled"
+]
 
 
 class CVBaseUnitResult(TypedDict):

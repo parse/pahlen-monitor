@@ -117,9 +117,15 @@ def recommended_action_from_cv(data: CVUnitAnalysisPayload) -> str:
     if mode == "standby":
         return "Unit is in standby. Check that circulation is running."
     if diagnosis == "Below target":
-        return "Value is below target. Unit may be dosing or waiting for the value to rise."
+        if mode == "dosing":
+            return "Value is below target. Unit should be dosing."
+        if mode == "waiting":
+            return "Value is below target. Unit is waiting for the value to rise."
     if diagnosis == "Above target":
-        return "Value is above target. Unit may be dosing or waiting for the value to drop."
+        if mode == "dosing":
+            return "Value is above target. Unit should be dosing."
+        if mode == "waiting":
+            return "Value is above target. Unit is waiting for the value to drop."
     return "Check dosing unit LED pattern."
 
 
