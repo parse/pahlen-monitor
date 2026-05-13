@@ -178,7 +178,7 @@ def test_latest_schema_prioritizes_error_reason_over_stale():
                 "blinking": [],
             },
             False,
-            "Value is below target. Unit may be dosing or waiting for the value to rise.",
+            "Value is below target. Unit should be dosing.",
         ),
         (
             {
@@ -190,7 +190,31 @@ def test_latest_schema_prioritizes_error_reason_over_stale():
                 "blinking": [],
             },
             False,
-            "Value is above target. Unit may be dosing or waiting for the value to drop.",
+            "Value is above target. Unit should be dosing.",
+        ),
+        (
+            {
+                "status": "warning",
+                "mode": "waiting",
+                "diagnosis": "Below target",
+                "level": 2,
+                "led_states": [False, True, False, False, False, False, False],
+                "blinking": [],
+            },
+            False,
+            "Value is below target. Unit is waiting for the value to rise.",
+        ),
+        (
+            {
+                "status": "warning",
+                "mode": "waiting",
+                "diagnosis": "Above target",
+                "level": 6,
+                "led_states": [False, False, False, False, False, True, False],
+                "blinking": [],
+            },
+            False,
+            "Value is above target. Unit is waiting for the value to drop.",
         ),
         (
             {

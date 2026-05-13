@@ -307,7 +307,7 @@ def build_result(
         if level in {1, 2, 3}:
             return {
                 "level": level,
-                "mode": "dosing" if device == "chlorine" else "unknown",
+                "mode": "dosing" if device == "chlorine" else "waiting",
                 "status": "warning",
                 "diagnosis": "Below target",
             }
@@ -315,7 +315,7 @@ def build_result(
         if level in {5, 6, 7}:
             return {
                 "level": level,
-                "mode": "dosing" if device == "ph" else "unknown",
+                "mode": "dosing" if device == "ph" else "waiting",
                 "status": "warning",
                 "diagnosis": "Above target",
             }
