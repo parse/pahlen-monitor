@@ -67,6 +67,8 @@ PRIVACY_COLORFUL_SATURATION_THRESHOLD = 80
 PRIVACY_COLORFUL_VALUE_THRESHOLD = 80
 PRIVACY_COLORFUL_RATIO_THRESHOLD = 0.01
 PRIVACY_TIMEOUT_MIN_FRAME_RATIO = 0.7
+PRIVACY_ROI_SHIFT_RADIUS_X = 8
+PRIVACY_ROI_SHIFT_RADIUS_Y = 8
 
 SHIFTED_ROIS: RoiMap = {
     device: [[x + 50, y, w, h] for x, y, w, h in rois] for device, rois in ROIS.items()
@@ -74,22 +76,22 @@ SHIFTED_ROIS: RoiMap = {
 
 PRIVACY_MASK_ROIS: RoiMap = {
     "chlorine": [
-        [570, 240, 14, 14],
-        [591, 240, 14, 14],
-        [612, 240, 14, 14],
-        [635, 240, 14, 14],
-        [653, 240, 14, 14],
-        [672, 240, 14, 14],
-        [691, 240, 14, 14],
+        [564, 234, 14, 14],
+        [585, 234, 14, 14],
+        [606, 234, 14, 14],
+        [629, 234, 14, 14],
+        [647, 234, 14, 14],
+        [666, 234, 14, 14],
+        [685, 234, 14, 14],
     ],
     "ph": [
-        [1105, 234, 14, 14],
-        [1123, 234, 14, 14],
-        [1141, 234, 14, 14],
-        [1160, 234, 14, 14],
-        [1176, 234, 14, 14],
-        [1193, 234, 14, 14],
-        [1210, 234, 14, 14],
+        [1101, 229, 14, 14],
+        [1119, 229, 14, 14],
+        [1137, 229, 14, 14],
+        [1156, 229, 14, 14],
+        [1172, 229, 14, 14],
+        [1189, 229, 14, 14],
+        [1206, 229, 14, 14],
     ],
 }
 
@@ -179,14 +181,20 @@ def detect_led_on_frames(
 ) -> dict[DeviceName, list[list[bool]]]:
     import cv2
 
+    return detect_led_on_hsv_frames(
+        [cv2.cvtColor(img, cv2.COLOR_BGR2HSV) for img in processed_images], rois
+    )
+
+
+def detect_led_on_hsv_frames(
+    hsv_images: list[np.ndarray], rois: RoiMap
+) -> dict[DeviceName, list[list[bool]]]:
     led_on_frames: dict[DeviceName, list[list[bool]]] = {
         "chlorine": [[] for _ in range(LED_COUNT)],
         "ph": [[] for _ in range(LED_COUNT)],
     }
 
-    for img in processed_images:
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
+    for hsv in hsv_images:
         for device in DEVICE_NAMES:
             for i, roi in enumerate(rois[device]):
                 x, y, w, h = roi
@@ -201,14 +209,20 @@ def detect_led_detection_strengths(
 ) -> dict[DeviceName, list[list[float]]]:
     import cv2
 
+    return detect_led_detection_strengths_hsv(
+        [cv2.cvtColor(img, cv2.COLOR_BGR2HSV) for img in processed_images], rois
+    )
+
+
+def detect_led_detection_strengths_hsv(
+    hsv_images: list[np.ndarray], rois: RoiMap
+) -> dict[DeviceName, list[list[float]]]:
     led_strengths: dict[DeviceName, list[list[float]]] = {
         "chlorine": [[] for _ in range(LED_COUNT)],
         "ph": [[] for _ in range(LED_COUNT)],
     }
 
-    for img in processed_images:
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
+    for hsv in hsv_images:
         for device in DEVICE_NAMES:
             for i, roi in enumerate(rois[device]):
                 x, y, w, h = roi
@@ -372,7 +386,7 @@ def detect_shifted_ph_timeout(processed_images: list[np.ndarray]) -> bool:
     )
 
 
-def timeout_ph_result() -> CVUnitAnalysisPayload:
+def timeout_result() -> CVUnitAnalysisPayload:
     return {
         "level": None,
         "mode": "error",
@@ -383,8 +397,7 @@ def timeout_ph_result() -> CVUnitAnalysisPayload:
     }
 
 
-def detect_privacy_mask_ph_timeout(processed_images: list[np.ndarray]) -> bool:
-    frames_by_led = detect_led_on_frames(processed_images, PRIVACY_MASK_ROIS)["ph"]
+def has_timeout_led_pattern(frames_by_led: list[list[bool]]) -> bool:
     total_frames = len(frames_by_led[0])
     min_on_frames = max(
         BLINK_MIN_ON_FRAMES,
@@ -396,12 +409,22 @@ def detect_privacy_mask_ph_timeout(processed_images: list[np.ndarray]) -> bool:
     )
 
 
-def is_grayscale_privacy_frame(processed_images: list[np.ndarray]) -> bool:
-    import cv2
+def detect_privacy_mask_timeout_with_shift_search(
+    hsv_images: list[np.ndarray], device: DeviceName
+) -> bool:
+    for dx in range(-PRIVACY_ROI_SHIFT_RADIUS_X, PRIVACY_ROI_SHIFT_RADIUS_X + 1):
+        for dy in range(-PRIVACY_ROI_SHIFT_RADIUS_Y, PRIVACY_ROI_SHIFT_RADIUS_Y + 1):
+            candidate_rois = shifted_device_rois(PRIVACY_MASK_ROIS[device], dx, dy)
+            frames_by_led = detect_device_led_on_hsv_frames(hsv_images, candidate_rois)
+            if has_timeout_led_pattern(frames_by_led):
+                return True
 
+    return False
+
+
+def is_grayscale_privacy_hsv_frame(hsv_images: list[np.ndarray]) -> bool:
     colorful_ratios = []
-    for img in processed_images:
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    for hsv in hsv_images:
         panel_area = hsv[PRIVACY_PANEL_Y, PRIVACY_PANEL_X]
         saturation = panel_area[:, :, 1]
         value = panel_area[:, :, 2]
@@ -417,11 +440,29 @@ def is_grayscale_privacy_frame(processed_images: list[np.ndarray]) -> bool:
     return bool(max(colorful_ratios, default=0) < PRIVACY_COLORFUL_RATIO_THRESHOLD)
 
 
+def is_grayscale_privacy_frame(processed_images: list[np.ndarray]) -> bool:
+    import cv2
+
+    return is_grayscale_privacy_hsv_frame(
+        [cv2.cvtColor(img, cv2.COLOR_BGR2HSV) for img in processed_images]
+    )
+
+
 def analyze_with_rois(
     processed_images: list[np.ndarray], rois: RoiMap
 ) -> CVAnalysisResult:
-    led_on_frames = detect_led_on_frames(processed_images, rois)
-    led_strengths = detect_led_detection_strengths(processed_images, rois)
+    import cv2
+
+    return analyze_with_hsv_rois(
+        [cv2.cvtColor(img, cv2.COLOR_BGR2HSV) for img in processed_images], rois
+    )
+
+
+def analyze_with_hsv_rois(
+    hsv_images: list[np.ndarray], rois: RoiMap
+) -> CVAnalysisResult:
+    led_on_frames = detect_led_on_hsv_frames(hsv_images, rois)
+    led_strengths = detect_led_detection_strengths_hsv(hsv_images, rois)
     final_results: CVAnalysisResult = {
         "chlorine": empty_unit_payload(),
         "ph": empty_unit_payload(),
@@ -442,36 +483,145 @@ def analyze_with_rois(
     return final_results
 
 
-def candidate_roi_sets(processed_images: list[np.ndarray]) -> list[RoiMap]:
-    if is_grayscale_privacy_frame(processed_images):
-        return [PRIVACY_MASK_ROIS]
-    return [SHIFTED_ROIS]
+def shifted_device_rois(rois: list[list[int]], dx: int, dy: int) -> list[list[int]]:
+    return [[x + dx, y + dy, w, h] for x, y, w, h in rois]
+
+
+def detect_device_led_on_hsv_frames(
+    hsv_images: list[np.ndarray], rois: list[list[int]]
+) -> list[list[bool]]:
+    frames_by_led: list[list[bool]] = [[] for _ in range(LED_COUNT)]
+
+    for hsv in hsv_images:
+        for i, roi in enumerate(rois):
+            x, y, w, h = roi
+            roi_hsv = hsv[y : y + h, x : x + w]
+            frames_by_led[i].append(is_led_lit(roi_hsv, get_led_color(i)))
+
+    return frames_by_led
+
+
+def unit_result_confidence(
+    frames_by_led: list[list[bool]],
+    strengths_by_led: list[list[float]],
+    led_states: list[bool],
+    blink_leds: list[int],
+    result: CVBaseUnitResult,
+) -> float:
+    score = 0.0
+    if result["mode"] != "unknown":
+        score += 2.0
+    if result["level"] is not None:
+        score += 2.0
+
+    total_frames = len(frames_by_led[0])
+    if any(led_states):
+        led_idx = led_states.index(True)
+        score += sum(frames_by_led[led_idx]) / total_frames
+        score += float(np.mean(strengths_by_led[led_idx]))
+
+    for led in blink_leds:
+        led_idx = led - 1
+        score += 0.5
+        score += float(np.mean(strengths_by_led[led_idx]))
+
+    return score
+
+
+def analyze_device_with_hsv_rois(
+    hsv_images: list[np.ndarray], device: DeviceName, rois: list[list[int]]
+) -> tuple[CVUnitAnalysisPayload, float]:
+    frames_by_led: list[list[bool]] = [[] for _ in range(LED_COUNT)]
+    strengths_by_led: list[list[float]] = [[] for _ in range(LED_COUNT)]
+
+    for hsv in hsv_images:
+        for i, roi in enumerate(rois):
+            x, y, w, h = roi
+            roi_hsv = hsv[y : y + h, x : x + w]
+            strength = led_detection_strength(roi_hsv, get_led_color(i))
+            strengths_by_led[i].append(strength)
+            frames_by_led[i].append(strength > LED_COLOR_MASK_RATIO_THRESHOLD)
+
+    led_states, blink_leds = summarize_led_frames(frames_by_led, strengths_by_led)
+    base_result = build_result(device, led_states, blink_leds)
+    confidence = unit_result_confidence(
+        frames_by_led, strengths_by_led, led_states, blink_leds, base_result
+    )
+
+    return {
+        **base_result,
+        "led_states": led_states,
+        "blinking": blink_leds,
+    }, confidence
+
+
+def best_privacy_mask_device_result(
+    hsv_images: list[np.ndarray], device: DeviceName
+) -> CVUnitAnalysisPayload:
+    best_result: CVUnitAnalysisPayload | None = None
+    best_confidence = -1.0
+
+    for dx in range(-PRIVACY_ROI_SHIFT_RADIUS_X, PRIVACY_ROI_SHIFT_RADIUS_X + 1):
+        for dy in range(-PRIVACY_ROI_SHIFT_RADIUS_Y, PRIVACY_ROI_SHIFT_RADIUS_Y + 1):
+            candidate_rois = shifted_device_rois(PRIVACY_MASK_ROIS[device], dx, dy)
+            candidate_result, confidence = analyze_device_with_hsv_rois(
+                hsv_images, device, candidate_rois
+            )
+            if confidence > best_confidence:
+                best_result = candidate_result
+                best_confidence = confidence
+
+    if best_result is None:
+        return empty_unit_payload()
+    return best_result
+
+
+def analyze_privacy_mask_with_shift_search(
+    hsv_images: list[np.ndarray],
+) -> CVAnalysisResult:
+    base_result = analyze_with_hsv_rois(hsv_images, PRIVACY_MASK_ROIS)
+    final_result: CVAnalysisResult = {
+        "chlorine": base_result["chlorine"],
+        "ph": base_result["ph"],
+    }
+
+    for device in DEVICE_NAMES:
+        device_result = base_result[device]
+        if device_result["level"] is None and device_result["mode"] == "unknown":
+            final_result[device] = best_privacy_mask_device_result(hsv_images, device)
+
+    return final_result
 
 
 def best_analysis_result(
     processed_images: list[np.ndarray], initial_result: CVAnalysisResult
 ) -> CVAnalysisResult:
     result = initial_result
-    for candidate_rois in candidate_roi_sets(processed_images):
-        candidate_result = analyze_with_rois(processed_images, candidate_rois)
-        if result_score(candidate_result) > result_score(result):
-            result = candidate_result
+    candidate_result = analyze_with_rois(processed_images, SHIFTED_ROIS)
+    if result_score(candidate_result) > result_score(result):
+        result = candidate_result
     return result
 
 
 def analyze_burst(images_bytes: list[bytes], rois: RoiMap = ROIS) -> CVAnalysisResult:
-    processed_images = [preprocess_image(img) for img in images_bytes]
+    import cv2
 
-    result = analyze_with_rois(processed_images, rois)
+    processed_images = [preprocess_image(img) for img in images_bytes]
+    hsv_images = [cv2.cvtColor(img, cv2.COLOR_BGR2HSV) for img in processed_images]
+
+    if rois is ROIS and is_grayscale_privacy_hsv_frame(hsv_images):
+        result = analyze_privacy_mask_with_shift_search(hsv_images)
+        for device in DEVICE_NAMES:
+            if detect_privacy_mask_timeout_with_shift_search(hsv_images, device):
+                result[device] = timeout_result()
+        return result
+
+    result = analyze_with_hsv_rois(hsv_images, rois)
 
     if rois is ROIS:
         result = best_analysis_result(processed_images, result)
 
-    if detect_shifted_ph_timeout(processed_images) or (
-        rois is ROIS
-        and is_grayscale_privacy_frame(processed_images)
-        and detect_privacy_mask_ph_timeout(processed_images)
-    ):
-        result["ph"] = timeout_ph_result()
+    if detect_shifted_ph_timeout(processed_images):
+        result["ph"] = timeout_result()
 
     return result

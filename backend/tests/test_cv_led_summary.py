@@ -1,3 +1,5 @@
+import cv_engine
+import numpy as np
 import pytest
 from cv_engine import build_result, summarize_led_frames
 
@@ -162,3 +164,19 @@ def test_timeout_pattern_is_error(device):
         "status": "error",
         "diagnosis": "Time-out (dosing stopped)",
     }
+
+
+def test_privacy_mask_timeout_shift_search_applies_to_chlorine():
+    hsv_images = [np.zeros((500, 1300, 3), dtype=np.uint8) for _ in range(3)]
+    shifted_rois = cv_engine.shifted_device_rois(
+        cv_engine.PRIVACY_MASK_ROIS["chlorine"], 5, -3
+    )
+
+    for hsv in hsv_images:
+        for led in cv_engine.TIMEOUT_BLINK_LEDS:
+            x, y, w, h = shifted_rois[led - 1]
+            hsv[y : y + h, x : x + w] = [0, 0, 255]
+
+    assert cv_engine.detect_privacy_mask_timeout_with_shift_search(
+        hsv_images, "chlorine"
+    )

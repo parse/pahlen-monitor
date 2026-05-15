@@ -1,3 +1,4 @@
+import cv_engine
 import pytest
 from cv_engine import analyze_burst
 from fixture_cases import FIXTURE_CASES, FixtureCase
@@ -34,3 +35,19 @@ def test_cv_logic_fixtures(case: FixtureCase, fixture_image_loader):
         assert result[device]["blinking"] == expected["blinking"], (
             f"{device} blinking mismatch"
         )
+
+
+def test_privacy_mask_search_recovers_small_roi_shift(
+    fixture_image_loader, monkeypatch
+):
+    shifted_rois = {
+        device: cv_engine.shifted_device_rois(rois, -8, 0)
+        for device, rois in cv_engine.PRIVACY_MASK_ROIS.items()
+    }
+    monkeypatch.setattr(cv_engine, "PRIVACY_MASK_ROIS", shifted_rois)
+
+    result = analyze_burst(fixture_image_loader("burst_14_light_off_bw"))
+
+    assert result["chlorine"]["level"] == 4
+    assert result["chlorine"]["status"] == "ok"
+    assert result["chlorine"]["diagnosis"] == "Auto mode"
