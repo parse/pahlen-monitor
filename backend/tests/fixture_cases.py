@@ -191,6 +191,25 @@ FIXTURE_CASES = [
             },
         },
     ),
+    FixtureCase(
+        folder="burst_14_light_off_bw",
+        expected={
+            "chlorine": {
+                "level": 4,
+                "status": "ok",
+                "diagnosis": "Auto mode",
+                "led_states": [False, False, False, True, False, False, False],
+                "blinking": [],
+            },
+            "ph": {
+                "level": 5,
+                "status": "warning",
+                "diagnosis": "Above target",
+                "led_states": [False, False, False, False, True, False, False],
+                "blinking": [],
+            },
+        },
+    ),
 ]
 
 
